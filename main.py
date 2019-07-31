@@ -18,5 +18,10 @@ from lib.datastore import tickdataStore
 from lib.stockops import tradeDate
 from lib.stockops import storeoperator
 if __name__ == "__main__":
+    trd = tradeDate()
+    trd.initalldata()
+
     stoper = storeoperator()
+    stoper.filldailydb()
+
     stoper.findsuit()

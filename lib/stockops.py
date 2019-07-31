@@ -209,6 +209,7 @@ class storeoperator:
         trydate = datetime.datetime.now().strftime('%Y%m%d')
         self.mfstore.storeAllStockInfo('20190630',trydate)
         self.dystore.storeAllStockInfo('20190630',trydate)
+        self.dybstore.storeAllStockInfo('20190630',trydate)
     def calrate(self, code):
         prvdt = None
         curdt = None
@@ -216,6 +217,7 @@ class storeoperator:
         curmavar = None
 
         entrydf =  self.dystore.loadEntry(code)
+        mfentry = self.mfstore.loadEntry(code)
         if entrydf.empty:
             return False
         dtlist = entrydf['trade_date'].get_values()
@@ -241,13 +243,140 @@ class storeoperator:
             return False
         cquery='trade_date==@curdt'
         pquery='trade_date==@prvdt'
-
+            #and (amount1 + amount2) > 1000000 \
+        fmfentry = mfentry.assign(blgpct=(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol'])/(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol']+mfentry['buy_md_vol']+mfentry['buy_sm_vol']),slgpct=(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol'])/(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol']+mfentry['sell_md_vol']+mfentry['sell_sm_vol'])) 
         cchg1 = entrydf.query(cquery).get("pct_chg").get_values()[0]  
         pchg1 = entrydf.query(pquery).get("pct_chg").get_values()[0]  
-
-        if curmavar > 0 and curmavar < 0.008 and prvmavar > -0.004 \
-            and cchg1 <4 and pchg1<4 and (pchg1+cchg1)>0 and (lowcount/size) <=0.4 and  (lowcount/size) >0.2:
+        amount1 = entrydf.query(cquery).get("amount").get_values()[0]
+        amount2 = entrydf.query(pquery).get("amount").get_values()[0]
+        cblgpct = fmfentry.query(cquery).get("blgpct").get_values()[0]  
+        pblgpct = fmfentry.query(pquery).get("blgpct").get_values()[0]         
+        cslgpct = fmfentry.query(cquery).get("slgpct").get_values()[0]
+        pslgpct = fmfentry.query(pquery).get("slgpct").get_values()[0] 
+        cnetflow = fmfentry.query(cquery).get("net_mf_amount").get_values()[0]
+        if (prvmavar > 0.03 and curmavar > 0 and cnetflow > 0 and cblgpct > 0.33  \
+            and cchg1 <4 and pchg1<4 and (pchg1+cchg1)>-1 \
+            and (amount1 + amount2) > 100000) or \
+            (prvmavar < 0.01 and prvmavar > 0 and curmavar < 0 and cnetflow < 0 and cslgpct < 0.3  \
+            and cchg1 <4 and pchg1<4 and (pchg1+cchg1)>-1 \
+            and (amount1 + amount2) > 100000):
             print('[' + code + ']' )
+    def calHigh(self, code, date=''):
+        prvdt = None
+        curdt = None
+        entrydf =  self.dystore.loadEntry(code, date)
+        mfentry = self.mfstore.loadEntry(code,date)
+        if entrydf.empty:
+            return False
+        dtlist = entrydf['trade_date'].get_values()
+        size = len(dtlist)
+        if size < 10:
+            return False
+        curdt = entrydf['trade_date'].tail(1).get_values()[0]
+        prvdt = entrydf['trade_date'].tail(2).get_values()[0]
+        #print('curdt:' + curdt +' prvdt:' + prvdt)
+
+        if curdt <'20190601':
+            return False
+        curma5 = self.dystore.getMa(code, curdt)
+        curma10 = self.dystore.getMa(code, curdt,10)
+        pmavar = self.dystore.getMa(code, prvdt) - self.dystore.getMa(code,prvdt,10)
+        cmavar = self.dystore.getMa(code, curdt) - self.dystore.getMa(code,curdt,10)
+        
+        amchg = (numpy.average(entrydf['amount'].tail(10).tail(3)) - numpy.average(entrydf['amount'].tail(10).head(3)))/numpy.average(entrydf['amount'].tail(10).head(3))
+        mamchg = (numpy.average(entrydf['amount'].tail(6).tail(3)) - numpy.average(entrydf['amount'].tail(6).head(3)))/numpy.average(entrydf['amount'].tail(6).head(3))
+        if cmavar < 0 or pmavar < 0:
+            if entrydf.query('pct_chg<=-5').empty:
+                return False
+        
+        cquery='trade_date==@curdt'
+        pquery='trade_date==@prvdt'
+        #fmfentry = mfentry.assign(blgpct=(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol'])/(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol']+mfentry['buy_md_vol']+mfentry['buy_sm_vol']),slgpct=(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol'])/(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol']+mfentry['sell_md_vol']+mfentry['sell_sm_vol'])) 
+        cchg1 = entrydf.query(cquery).get("pct_chg").get_values()[0]  
+        pchg1 = entrydf.query(pquery).get("pct_chg").get_values()[0]  
+        amount1 = entrydf.query(cquery).get("amount").get_values()[0]
+        amount2 = entrydf.query(pquery).get("amount").get_values()[0]
+        curclose = entrydf.query(cquery).get("close").get_values()[0]
+        #cblgpct = fmfentry.query(cquery).get("blgpct").get_values()[0]  
+        #pblgpct = fmfentry.query(pquery).get("blgpct").get_values()[0]         
+        #cslgpct = fmfentry.query(cquery).get("slgpct").get_values()[0]
+        #pslgpct = fmfentry.query(pquery).get("slgpct").get_values()[0] 
+        #cnetflow = mfentry.query(cquery).get("net_mf_amount").get_values()[0]
+        #ccmavar = (curclose - curma10)/curma10
+        if amchg < 2.5:
+            if amchg < 1:
+                return False
+            if  cchg1 < 5 and pchg1 < 5 and (pchg1+cchg1)>-1  and (amount1 + amount2) > 120000 and mamchg>0.5:
+                print('strategy 2- [' + code + ']')
+                return True
+            if cchg1 < -5  and (pchg1+cchg1)>-2  and (amount1 + amount2) > 120000:
+                print('strategy 3- [' + code + ']')
+            return True
+        camchg = (entrydf['amount'].tail(1).get_values()[0] - numpy.average(entrydf['amount'].tail(4).head(3)))/numpy.average(entrydf['amount'].tail(4).head(3))
+
+        if  camchg>5:
+            print('strategy 4 - [' + code + ']')
+        return True
+        '''
+        if (cnetflow > 0 and cblgpct > 0.33  \
+            and cchg1 < 3 and pchg1 < 3 and (pchg1+cchg1)>-0.5 \
+            and (amount1 + amount2) > 100000) or \
+            (cnetflow < 0 and cslgpct < 0.3  \
+            and cchg1 <3 and pchg1<3 and (pchg1+cchg1)>-0.5 \
+            and (amount1 + amount2) > 100000):
+            print('[' + code + ']' )
+        '''
+    def generateStockInfo(self, code, date):
+        dyentry = self.dystore.loadData(code, date, date)
+        if dyentry.empty:
+            return dyentry
+        bchg = dyentry.query('pct_chg>=8')
+        if bchg.empty:
+            return bchg
+        dt = bchg['trade_date'].get_values()[0]
+        ent = self.dystore.loadEntry(code, date=dt, line = 5)
+        mfent = self.mfstore.loadEntry(code, date=dt, line = 5)
+        mfent = mfent.assign(blgpct=(mfent['buy_elg_vol'] + mfent['buy_lg_vol'])/(mfent['buy_elg_vol'] + mfent['buy_lg_vol']+mfent['buy_md_vol']+mfent['buy_sm_vol']),\
+            slgpct=(mfent['sell_elg_vol'] + mfent['sell_lg_vol'])/(mfent['sell_elg_vol'] + mfent['sell_lg_vol']+mfent['sell_md_vol']+mfent['sell_sm_vol']))
+
+        newpd = pd.merge(ent.filter(items=['ts_code', 'trade_date','open','close','high','pct_chg','amount','vol']),\
+            mfent.filter(items=['ts_code', 'trade_date', 'blgpct','slgpct','net_mf_vol']), \
+                on=['ts_code','trade_date'])
+        ffdt = newpd['trade_date'].get_values()
+        madf = None
+        for fdt in ffdt:
+            ma5 = self.dystore.getMa(code, fdt)
+            ma10 = self.dystore.getMa(code, fdt,10)
+            dicitem = {'ts_code': stockInfoStore.canoncode(code), 'trade_date': fdt, 'ma5': ma5, 'ma10': ma10 }
+            if madf is None:
+                madf = pd.DataFrame.from_records(dicitem,index=[0])
+            else:
+                madf = madf.append(pd.DataFrame.from_records(dicitem,index=[0]))
+        newpd = pd.merge(newpd, madf,  on=['ts_code','trade_date'])
+        return newpd
+    def generateStockAllInfo(self, code, ln=120):
+        ent = self.dystore.loadEntry(code, line=ln)
+        if ent.empty:
+            return
+        mfent = self.mfstore.loadEntry(code, line = ln)
+        mfent = mfent.assign(blgpct=(mfent['buy_elg_vol'] + mfent['buy_lg_vol'])/(mfent['buy_elg_vol'] + mfent['buy_lg_vol']+mfent['buy_md_vol']+mfent['buy_sm_vol']),\
+            slgpct=(mfent['sell_elg_vol'] + mfent['sell_lg_vol'])/(mfent['sell_elg_vol'] + mfent['sell_lg_vol']+mfent['sell_md_vol']+mfent['sell_sm_vol']))
+
+        newpd = pd.merge(ent.filter(items=['ts_code', 'trade_date','open','close','high','pct_chg','amount','vol']),\
+            mfent.filter(items=['ts_code', 'trade_date', 'blgpct','slgpct','net_mf_vol', 'net_mf_amount']), \
+                on=['ts_code','trade_date'])
+        ffdt = newpd['trade_date'].get_values()
+        madf = None
+        for fdt in ffdt:
+            ma5 = self.dystore.getMa(code, fdt)
+            ma10 = self.dystore.getMa(code, fdt,10)
+            dicitem = {'ts_code': stockInfoStore.canoncode(code), 'trade_date': fdt, 'ma5': ma5, 'ma10': ma10 }
+            if madf is None:
+                madf = pd.DataFrame.from_records(dicitem,index=[0])
+            else:
+                madf = madf.append(pd.DataFrame.from_records(dicitem,index=[0]))
+        newpd = pd.merge(newpd, madf,  on=['ts_code','trade_date'])
+        newpd.to_excel('cal_' +code + '.xlsx')
 
     def generateAll(self, code):
         dyentry = self.dystore.loadEntry(code, line=120)
@@ -300,7 +429,26 @@ class storeoperator:
                 madf = madf.append(pd.DataFrame.from_records(dicitem,index=[0]))
         newpd = pd.merge(newpd, madf,  on=['ts_code','trade_date'])
         return newpd
-
+    def genhgstockinfo(self, date=''):
+        rdate = date
+        if date == '':
+            rdate = datetime.datetime.now().strftime('%Y%m%d')
+        df = self.bgstock.loadallstock()
+        mdf = None
+        print('start')
+        for i in range(0, df.index.size):
+            bstockdic = df.iloc[i].to_dict()
+            code = bstockdic['symbol']
+            tmpdf = self.generateStockInfo(code,rdate)
+            if tmpdf.empty:
+                continue
+            if mdf is None:
+                mdf = tmpdf
+            else:
+                mdf = mdf.append(tmpdf)
+            print("code:"+ code + " done")
+        mdf.to_excel('allhigh' + rdate + '.xlsx')
+        print('done')
     def findpattern(self):
         df = self.bgstock.loadallstock()
         mdf = None
@@ -317,12 +465,15 @@ class storeoperator:
             print("code:"+ code + " done")
         mdf.to_excel('allhigh.xlsx')
         print('done')
-    def findsuit(self):
+    def findsuit(self, date=''):
+        rdate = date
+        if date == '':
+            rdate = datetime.datetime.now().strftime('%Y%m%d')
         df = self.bgstock.loadallstock()
         for i in range(0, df.index.size):
             bstockdic = df.iloc[i].to_dict()
             code = bstockdic['symbol']
-            self.calrate(code)    
+            self.calHigh(code, rdate)    
 class bgstockInfo:
     def __init__(self, mgclient= MongoClient('mongodb://localhost:27017/')['stock']):
         self.mongoClient = mgclient

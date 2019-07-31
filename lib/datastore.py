@@ -296,10 +296,13 @@ class dybasicStore(stockInfoStore):
     def __init__(self,  mgclient= MongoClient('mongodb://localhost:27017/')['stock']):
         super(dybasicStore, self).__init__(mgclient)
         self.collection='dailybasic'
-        
+    def storeProcess(self, code, stdate, eddate, src,updateflag):
+        print("dailybasic only support batch store")
+        pass    
     def getprocessData(self, code, stdate, eddate,src):
-       return self.pro.daily_basic(ts_code=stockInfoStore.canoncode(code), start_date=stdate,end_date=eddate, fields='ts_code,trade_date,turnover_rate,volume_ratio,pe,pb')
-    
+        #return self.pro.daily_basic(ts_code=stockInfoStore.canoncode(code), start_date=stdate,end_date=eddate, fields='ts_code,trade_date,turnover_rate,volume_ratio,pe,pb')
+        print("dailybasic only support batch store")
+        pass
     def fetchBatchData(self, trade_date, src):
         return self.pro.daily_basic(trade_date=trade_date,fields='ts_code,trade_date,turnover_rate,turnover_rate_f, volume_ratio,pe,pb,total_share,float_share,free_share,total_mv,circ_mv')
 
