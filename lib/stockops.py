@@ -98,7 +98,7 @@ class tradeDate(stockInfoStore):
             self.initalldata(today)
         if self.isTrade(today):
             nowtime = datetime.datetime.now()
-            amtmstart =datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 9,30,0,0)
+            amtmstart =datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 9,20,0,0)
             amtmbreak = datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 11,30,0,0)
             pmtmstart = datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 13,00,0,0)
             pmtmend = datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 15,00,0,0)
