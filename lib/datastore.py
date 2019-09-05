@@ -5,6 +5,8 @@ import numpy
 import datetime
 import unittest
 import threading
+import copy
+
 class Singleton(object):
     _instance_lock = threading.Lock()
 
@@ -20,7 +22,51 @@ class Singleton(object):
                 if not hasattr(Singleton, "_instance"):
                     Singleton._instance = object.__new__(cls)  
         return Singleton._instance
+class dbbase:
+    def __init__(self,mgclient):
+        self.mongoClient = mgclient
+        self.collection =''
+        self.keydictarray=['ts_code','trade_date']
 
+class Analystpool(dbbase):
+    def __init__(self, mgclient= MongoClient('mongodb://localhost:27017/')['stock']):
+        super(Analystpool, self).__init__(mgclient)
+        self.collection='analystpool'
+        self.keydictarray=['code','trade_date']
+    def setMonitoring(self, code, trade_date, mprice, flag=True):
+        storeset = self.mongoClient[self.collection]
+        monitor = 0
+        if flag:
+            monitor = 1
+        keydic={}
+        keydic[self.keydictarray[0]] = code
+        keydic[self.keydictarray[1]] = trade_date
+        storeset.update_one(keydic,{'$set': {'Monitorflag': monitor, 'Pricetarget': mprice}}, upsert=True)
+
+    def saveRec(self,dicrec):
+        storeset = self.mongoClient[self.collection]
+        keydic={}
+        cpdict = copy.deepcopy(dicrec)
+        for dickey in self.keydictarray:
+            keydic[dickey] = dicrec[dickey]
+            del cpdict[dickey]
+        storeset.update_one(keydic,{'$setOnInsert': {'upflag':1}, '$set':cpdict}, upsert=True)
+    def loadData(self,trade_date):
+        query = {self.keydictarray[1]: trade_date }
+        df = stockInfoStore.smgquery(self.mongoClient,self.collection, query)
+        return df
+    def fetchDataEntryByCode(self, code):
+        query = {self.keydictarray[0]: code }
+        df = stockInfoStore.smgquery(self.mongoClient,self.collection, query)
+        return df
+
+    def fetchDataEntry(self,trade_date, end_date=None):
+        rdate = end_date
+        if end_date is None:
+            rdate = datetime.datetime.now().strftime('%Y%m%d')
+        query = {self.keydictarray[1]: {"$gte":trade_date, "$lte":rdate} }
+        df = stockInfoStore.smgquery(self.mongoClient,self.collection, query)
+        return df
 '''
 pattern:
 Has ts_code, trade_date
@@ -92,7 +138,7 @@ class stockInfoStore:
             query = {self.keydictarray[0]: stockInfoStore.canoncode(code), self.keydictarray[1]: {"$lt":trade_date}  }
                         
         df = self.mgquery(query)
-        if df.empty:
+        if df.empty or len(df.values) < abs(offset):
             #print("info empty，date=%s, offset=%d"%(trade_date,offset))
             return None
         if offset > 0:
@@ -218,7 +264,7 @@ class stockInfoStore:
             print(str(err))  
     def mgquery(self, query,sort=None):
         return stockInfoStore.smgquery(self.mongoClient,self.collection, query,sort)
-    def loadEntry(self, code, date='',  line=10):
+    def loadEntry(self, code, date='',  line=10, prv=True):
         ndf = self.LoadDataInfobyStock(code)
         rtdate = date
         if ndf.empty:
@@ -226,6 +272,10 @@ class stockInfoStore:
         if date == '':
             rtdate = datetime.datetime.now().strftime('%Y%m%d')
         querystring = self.keydictarray[1] + '<=@rtdate'
+        if not prv:
+            querystring = self.keydictarray[1] + '>=@rtdate'
+            vdf = ndf.query(querystring).sort_values(by=[self.keydictarray[1]]).head(line)
+            return vdf
         #print(querystring)
         vdf = ndf.query(querystring).sort_values(by=[self.keydictarray[1]]).tail(line)
         return vdf
@@ -273,7 +323,18 @@ class dailydataStore(stockInfoStore):
             print("can not caculate ma")
         mylist = df['close'].head(num).get_values()
         return numpy.average(mylist)
+    def getAvg(self, code, field, trade_date, num=100):
+        entrys = self.loadEntry(code, trade_date, num)
+        if entrys.empty:
+            return None
+        return numpy.average(entrys[field])
 
+    def getStd(self, code, field, trade_date, num=100):
+        entrys = self.loadEntry(code, trade_date, num)
+        if entrys.empty:
+            return None
+        return numpy.std(entrys[field])
+    
     def pesMa(self, code, price, trade_date='', num=5):
         assert(num > 0)
         date = trade_date
