@@ -5,7 +5,6 @@ import numpy
 import datetime
 import unittest
 from .datastore import *
-import itchat
 
 import requests
 import json
@@ -268,21 +267,29 @@ class storeoperator:
     def getRealQuote(code):
         df = ts.get_realtime_quotes(code) #Single stock symbol
         return df[['code','name','price','bid','ask','volume','amount','time']]
-    
-    def setThreadRun(self, running=True):
-        keydic = {self.paramField: self.paramThreadRun}
+    def setParam(self, name, value):
+        keydic = {self.paramField: name}
         mydict = {}
-        mydict[self.paramField] = self.paramThreadRun
-        mydict[self.valueField] = str(running)
+        mydict[self.paramField] = name
+        mydict[self.valueField] = str(value)
         paramset = self.mongoClient[self.paramterset]
         paramset.update_one(keydic,{'$set':mydict,'$setOnInsert': {'upflag':1}}, upsert=True)
-    def getThreadRunningFlag(self):
-        query =  {self.paramField: self.paramThreadRun}
+    def getParam(self, name):
+        query =  {self.paramField: name}
         rowset = self.mongoClient[self.paramterset]
         rds = rowset.find(query)
         for rec in rds:
-            if rec.__contains__(self.valueField) and rec[self.valueField]=='False':
-                return False
+            if rec.__contains__(self.valueField):
+                return rec[self.valueField]
+        return None
+
+    def setThreadRun(self, running=True):
+        self.setParam(self.paramThreadRun, str(running) )
+    
+    def getThreadRunningFlag(self):
+        value = self.getParam(self.paramThreadRun)
+        if not value is None and value =='False':
+            return False
         return True
     def updateMonitorSet(self, line=12):
         trade_date = datetime.datetime.now().strftime('%Y%m%d')
@@ -928,7 +935,7 @@ class storeoperator:
         for i in range(0, df.index.size):
             bstockdic = df.iloc[i].to_dict()
             code = bstockdic['symbol']
-            if self.calrate(code, rdate):
+            if self.calrate(code, rdate) and self.debug:
                 dicitem=self.genresultfld(code, rdate)
                 if resdf is None:
                     resdf = pd.DataFrame.from_records(dicitem,index=[vv])
