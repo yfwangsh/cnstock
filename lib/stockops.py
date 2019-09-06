@@ -307,9 +307,12 @@ class storeoperator:
             mydict = rr._asdict()
             code = mydict['code']
             date = mydict['trade_date']
+            centry = self.dystore.loadEntry(code, line=1)
             lowmindic = self.lowPriceAfterDict(code, date)
             PriceTarget = self.getProposed(code, date)
+            cprice = centry['close'].get_values()[0]
             recentry = df.query('code==@code')
+            clsvar= round((PriceTarget - cprice)/PriceTarget * 100,2)
             if not date == max(recentry['trade_date']):
                 self.analyst.setMonitoring(code, date, PriceTarget,False)
                 continue
@@ -320,9 +323,16 @@ class storeoperator:
                     if varpct > -10 and varpct < -0.3:
                         self.analyst.setMonitoring(code, date,PriceTarget)
                     else:
-                        self.analyst.setMonitoring(code, date, PriceTarget, flag=False)
+                        
+                        if varpct >= -0.3 and varpct <= 1.5 and abs(clsvar)<=1.5:
+                            self.analyst.setMonitoring(code, date, PriceTarget)
+                        else:
+                            self.analyst.setMonitoring(code, date, PriceTarget, flag=False)
                 else:
-                    self.analyst.setMonitoring(code, date,PriceTarget, flag=False)
+                    if abs(clsvar)<=1.5:
+                        self.analyst.setMonitoring(code, date,PriceTarget)
+                    else:
+                        self.analyst.setMonitoring(code, date,PriceTarget, flag=False)
             else:
                 self.analyst.setMonitoring(code, date,PriceTarget)
                 
