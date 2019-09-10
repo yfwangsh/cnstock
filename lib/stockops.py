@@ -295,7 +295,7 @@ class storeoperator:
         df = self.analyst.fetchDataEntry(start_date, end_date)
         val='False'
         wdf = df.query('result==@val')
-        for rr in wdf.itertuples(index=False):
+        for rr in df.itertuples(index=False):
             mydict = rr._asdict()
             code = mydict['code']
             date = mydict['trade_date']
@@ -342,11 +342,11 @@ class storeoperator:
         df = self.analyst.fetchDataEntry(lasttrade)
         val='False'
         wdf = df.query('result==@val')
-        for rr in wdf.itertuples(index=False):
+        for rr in df.itertuples(index=False):
             mydict = rr._asdict()
             code = mydict['code']
             date = mydict['trade_date']
-            if mydict.__contains__('manualprice') and mydict['manualprice']=='True':
+            if mydict.__contains__('mpflag') and mydict['mpflag']==1:
                 continue
             centry = self.dystore.loadEntry(code, line=1)
             lowmindic = self.lowPriceAfterDict(code, date)
