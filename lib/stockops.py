@@ -291,6 +291,45 @@ class storeoperator:
         if not value is None and value =='False':
             return False
         return True
+    def updateMonitorSetByDay(self, start_date, end_date):
+        df = self.analyst.fetchDataEntry(start_date, end_date)
+        val='False'
+        wdf = df.query('result==@val')
+        for rr in wdf.itertuples(index=False):
+            mydict = rr._asdict()
+            code = mydict['code']
+            date = mydict['trade_date']
+            if mydict.__contains__('mpflag') and mydict['mpflag'] == 1:
+                continue
+            centry = self.dystore.loadEntry(code, line=1)
+            lowmindic = self.lowPriceAfterDict(code, date)
+            PriceTarget = self.getProposed(code, date)
+            cprice = centry['close'].get_values()[0]
+            recentry = df.query('code==@code')
+            clsvar= round((PriceTarget - cprice)/PriceTarget * 100,2)
+            if not date == max(recentry['trade_date']):
+                self.analyst.setMonitoring(code, date, PriceTarget,False)
+                continue
+            if not lowmindic is None:
+                Pricelow = lowmindic['low']
+                if PriceTarget < Pricelow :
+                    varpct = round((PriceTarget - Pricelow)/PriceTarget * 100,2)
+                    if varpct > -10 and varpct < -0.3:
+                        self.analyst.setMonitoring(code, date,PriceTarget)
+                    else:
+                        
+                        if varpct >= -0.3 and varpct <= 1.5 and abs(clsvar)<=1.5:
+                            self.analyst.setMonitoring(code, date, PriceTarget)
+                        else:
+                            self.analyst.setMonitoring(code, date, PriceTarget, flag=False)
+                else:
+                    if abs(clsvar)<=1.5:
+                        self.analyst.setMonitoring(code, date,PriceTarget)
+                    else:
+                        self.analyst.setMonitoring(code, date,PriceTarget, flag=False)
+            else:
+                self.analyst.setMonitoring(code, date,PriceTarget)
+
     def updateMonitorSet(self, line=12):
         trade_date = datetime.datetime.now().strftime('%Y%m%d')
         lasttrade = trade_date
@@ -307,6 +346,8 @@ class storeoperator:
             mydict = rr._asdict()
             code = mydict['code']
             date = mydict['trade_date']
+            if mydict.__contains__('manualprice') and mydict['manualprice']=='True':
+                continue
             centry = self.dystore.loadEntry(code, line=1)
             lowmindic = self.lowPriceAfterDict(code, date)
             PriceTarget = self.getProposed(code, date)
@@ -346,11 +387,11 @@ class storeoperator:
             count = count + 1
             lasttrade = self.tradedate.getlasttrade(lasttrade)
         df = self.analyst.fetchDataEntry(lasttrade)
-        wdf = df.query('Monitorflag==1')
+        wdf = df.query('Monitorflag==1 or fmflag==1')
         return wdf     
     def getMonitorDaySet(self, date):
         df = self.analyst.loadData(date)
-        wdf = df.query('Monitorflag==1')
+        wdf = df.query('Monitorflag==1 or fmflag==1')
         return wdf
 
     def pdavailable(self, code, date, offset=0):
@@ -567,13 +608,20 @@ class storeoperator:
             return retval
 
         if cchg > 0 and pchg <= 4 and (cchg+pchg)<11:
-            hgprice = max(dfprev['open'].get_values()[0],dfprev['close'].get_values()[0])  
-            retval = round((dfprev['high'].get_values()[0]+hgprice)/2, 2) 
+            mnprice = min(dfprev['open'].get_values()[0],dfprev['close'].get_values()[0]) 
+            hgprice = max(dfprev['open'].get_values()[0],dfprev['close'].get_values()[0])
+            if pchg > 0 and (cchg+pchg) >= 3:  
+                retval = round((dfprev['high'].get_values()[0]+hgprice)/2, 2) 
+            else:
+                retval = round((dfprev['low'].get_values()[0]+mnprice)/2, 2) 
             return retval 
         
         if cchg > 0 and pchg > 4 and (cchg+pchg)<11:
-            hgprice = max(dfpprev['open'].get_values()[0],dfpprev['close'].get_values()[0])  
-            retval = round(hgprice, 2) 
+            if pchg < 9:
+                hgprice = max(dfpprev['open'].get_values()[0],dfpprev['close'].get_values()[0])  
+                retval = round(hgprice, 2) 
+            else:
+                retval = round(df['close'].get_values()[0]* (100 - (cchg+pchg)/2)/100, 2)
             return retval 
 
     def calrate(self, code, date=''):
@@ -593,7 +641,9 @@ class storeoperator:
 
         curdt = entrydf['trade_date'].tail(1).get_values()[0]
         prvdt = entrydf['trade_date'].tail(2).get_values()[0]
-        if curdt <'20190601':
+        if date == '':
+            date = datetime.datetime.now().strftime('%Y%m%d')
+        if (datetime.datetime.strptime(date,'%Y%m%d') - datetime.datetime.strptime(curdt,'%Y%m%d')) > 10*datetime.timedelta(days=1):
             return False
         pmavar = (self.dystore.getMa(code, prvdt) - self.dystore.getMa(code,prvdt,10))/self.dystore.getMa(code,prvdt,10)
         cmavar = (self.dystore.getMa(code, curdt) - self.dystore.getMa(code,curdt,10))/self.dystore.getMa(code,curdt,10)
@@ -634,6 +684,8 @@ class storeoperator:
         ctf = entrydf.query(cquery).get("turnover_rate_f").get_values()[0]
         camchg = amount1/amount2
         if am1chg > 1.5 and camchg > 2 and (amount1 + amount2) > 160000 and cchg1 > 0 and cclose>6.4:
+            if (cchg1 + pchg1) <= 3 and pchg1 > 0:
+                return False
             results = self.checkpredict(code, curdt,5)
             if self.debug:
                 print('strategy 1 - [' + code + '] and result: ' +str(results) + ',pay attendtion to amount change:' + str(camchg))

@@ -38,10 +38,32 @@ class Analystpool(dbbase):
         monitor = 0
         if flag:
             monitor = 1
+        updic = {}
+        updic['Monitorflag'] = monitor
+        if mprice is not None:
+            updic['Pricetarget'] = mprice
+        updic['lastupdated'] = datetime.datetime.now().strftime('%Y%m%d')
         keydic={}
         keydic[self.keydictarray[0]] = code
         keydic[self.keydictarray[1]] = trade_date
-        storeset.update_one(keydic,{'$set': {'Monitorflag': monitor, 'Pricetarget': mprice}}, upsert=True)
+        storeset.update_one(keydic,{'$set': updic}, upsert=True)
+    def setManualFlag(self, code, trade_date, mprice, fmflag=False):
+        storeset = self.mongoClient[self.collection]
+        updic = {}
+        if mprice is not None:
+            updic['mpflag'] = 1
+            updic['Pricetarget'] = mprice
+        else:
+            updic['mpflag'] = 0
+        monitor = 0
+        if fmflag:
+            monitor = 1
+        updic['fmflag'] = monitor
+        updic['lastupdated'] = datetime.datetime.now().strftime('%Y%m%d')
+        keydic={}
+        keydic[self.keydictarray[0]] = code
+        keydic[self.keydictarray[1]] = trade_date
+        storeset.update_one(keydic,{'$set': updic}, upsert=True)
 
     def saveRec(self,dicrec):
         storeset = self.mongoClient[self.collection]
