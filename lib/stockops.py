@@ -387,12 +387,16 @@ class storeoperator:
             count = count + 1
             lasttrade = self.tradedate.getlasttrade(lasttrade)
         df = self.analyst.fetchDataEntry(lasttrade)
-        wdf = df.query('Monitorflag==1 or fmflag==1')
-        return wdf     
+        if 'fmflag' in df.columns:
+            return df.query('Monitorflag==1 or fmflag==1')
+        else:
+            return df.query('Monitorflag==1')
     def getMonitorDaySet(self, date):
         df = self.analyst.loadData(date)
-        wdf = df.query('Monitorflag==1 or fmflag==1')
-        return wdf
+        if 'fmflag' in df.columns:
+            return df.query('Monitorflag==1 or fmflag==1')
+        else:
+            return df.query('Monitorflag==1')
 
     def pdavailable(self, code, date, offset=0):
         dyoffset = offset + 2
