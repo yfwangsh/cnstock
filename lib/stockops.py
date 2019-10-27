@@ -5,9 +5,118 @@ import numpy
 import datetime
 import unittest
 from .datastore import *
-
 import requests
 import json
+
+class pollst:
+    def __init__(self, code, trade_date):
+        self.upline = 0
+        self.downline = 0
+        self.neg = False
+        self.postline = 0
+        self.pct_chg = 0
+        self.jump = False
+        self.flag = None
+        self.openp = 0
+        self.closep = 0
+        self.highp = 0
+        self.lowp = 0
+        self.code = code
+        self.trade_date = trade_date
+        self.prev = None
+        self.next = None
+        self.vol = 0
+        self.amount = 0
+
+    def buildpost(self, openp, closep, highp, lowp, pct_chg, vol, amount):
+        self.openp = openp
+        self.closep = closep
+        self.highp = highp
+        self.lowp = lowp
+        self.pct_chg = pct_chg
+        self.vol = vol
+        self.amount = amount
+        self.upline = round((highp - max(openp, closep))/closep * 100, 2)
+        self.downline = round((min(openp, closep) - lowp)/closep * 100, 2)
+        self.postline = round(abs(openp - closep)/closep*100, 2)
+        self.pct_chg = pct_chg
+        self.neg = (openp - closep) > 0
+        self.jump = pct_chg > 0 and (lowp - closep/(1+pct_chg/100))>0 
+
+    def buildfromdf(self, df):
+        openp = df['open'].get_values()[0]
+        closep = df['close'].get_values()[0]
+        highp = df['high'].get_values()[0]
+        lowp = df['low'].get_values()[0]
+        pct_chg = df['pct_chg'].get_values()[0]
+        vol = df['vol'].get_values()[0]
+        amount = df['amount'].get_values()[0]
+        self.buildpost(openp, closep, highp, lowp, pct_chg, vol, amount)
+    def getNode(self, date):
+        if self.trade_date == date:
+            return self
+        elif self.trade_date > date:
+            node = self.prev
+            while  node is not None:
+                if node.trade_date == date:
+                    return node
+                node = node.prev
+                if node.trade_date < date:
+                    return None
+        elif self.trade_date < date:
+            node = self.next
+            while node is not None:
+                if node.trade_date == date:
+                    return node
+                node = node.next
+                if node.trade_date > date:
+                    return node
+        return None       
+        
+    @staticmethod
+    def calt(num):
+        w1 = 0
+        if num < 1:
+            w1 = 0
+        elif num <= 3:
+            w1 = 1
+        elif num <= 5:
+            w1 = 2
+        elif num < 9:
+            w1 = 3
+        else:
+            w1 = 4
+        return w1
+    @staticmethod 
+    def calpct(var, base, absflag=False):
+        ret  = (var - base)/base * 100
+        if absflag:
+            ret = abs(ret)
+        return ret 
+    def getzPoint(self):
+        return (self.openp + self.closep)/2
+    def getType(self):
+        if self.flag is None:
+            self.flag = str(self.calt(self.upline)) + str(self.calt(self.postline))+ str(self.calt(self.downline))
+            if self.neg:
+                self.flag = '-' + self.flag
+            else:
+                self.flag = '+' + self.flag
+            if self.pct_chg > 0:
+                self.flag = self.flag + '+' + str(self.calt(self.pct_chg))
+            else:
+                self.flag = self.flag + '-' +  str(self.calt(abs(self.pct_chg)))
+            if self.prev is not None:
+                hgpct = self.calpct((self.openp+self.closep)/2, (self.prev.openp + self.prev.closep)/2)
+                if hgpct > 0:
+                    self.flag = self.flag + '+'
+                else:
+                    self.flag = self.flag + '-'
+                self.flag = self.flag + str(self.calt(abs(hgpct)))
+        return self.flag
+    
+
+
 
 class DingTalk_Base:
     def __init__(self):
@@ -78,7 +187,12 @@ class tradeDate(stockInfoStore):
             print(str(err))       
     def getprocessData(self, code, stdate, eddate,src):
         return self.pro.trade_cal(exchange=code,start_date=stdate, end_date=eddate,fields='pretrade_date,exchange,cal_date,is_open')
-
+    def getDBRange(self, bg=True):
+        start, end = self.getStoreTMRange('SSE')
+        if bg:
+            return start
+        else:
+            return end
     def initalldata(self, date=''):
         stdate = '20140101'
         if date =='':
@@ -96,7 +210,7 @@ class tradeDate(stockInfoStore):
         today = datetime.datetime.now().strftime('%Y%m%d')
         if today > end:
             self.initalldata(today)
-        if self.isTrade(today):
+        if self.isTrade(today) == 1:
             nowtime = datetime.datetime.now()
             amtmstart =datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 9,20,0,0)
             amtmbreak = datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 11,30,0,0)
@@ -266,7 +380,7 @@ class storeoperator:
     @staticmethod
     def getRealQuote(code):
         df = ts.get_realtime_quotes(code) #Single stock symbol
-        return df[['code','name','price','bid','ask','volume','amount','time']]
+        return df[['code','name','open','high','low','pre_close','price','bid','ask','volume','amount','time']]
     def setParam(self, name, value):
         keydic = {self.paramField: name}
         mydict = {}
@@ -302,43 +416,39 @@ class storeoperator:
             if mydict.__contains__('mpflag') and mydict['mpflag'] == 1:
                 continue
             centry = self.dystore.loadEntry(code, line=1)
-            lowmindic = self.lowPriceAfterDict(code, date)
+            basenode = self.buildposts(code, date, node=10)
             PriceTarget = self.getProposed(code, date)
-            cprice = centry['close'].get_values()[0]
-            recentry = df.query('code==@code')
-            clsvar= round((PriceTarget - cprice)/PriceTarget * 100,2)
-            if not date == max(recentry['trade_date']):
-                self.analyst.setMonitoring(code, date, PriceTarget,False)
-                continue
-            if not lowmindic is None:
-                Pricelow = lowmindic['low']
-                if PriceTarget < Pricelow :
-                    varpct = round((PriceTarget - Pricelow)/PriceTarget * 100,2)
-                    if varpct > -10 and varpct < -0.3:
-                        self.analyst.setMonitoring(code, date,PriceTarget)
-                    else:
-                        
-                        if varpct >= -0.3 and varpct <= 1.5 and abs(clsvar)<=1.5:
-                            self.analyst.setMonitoring(code, date, PriceTarget)
-                        else:
-                            self.analyst.setMonitoring(code, date, PriceTarget, flag=False)
-                else:
-                    if abs(clsvar)<=1.5:
-                        self.analyst.setMonitoring(code, date,PriceTarget)
-                    else:
-                        self.analyst.setMonitoring(code, date,PriceTarget, flag=False)
-            else:
-                self.analyst.setMonitoring(code, date,PriceTarget)
-
+            umonitor = False
+            cpnode = basenode.next
+            mvday = 1
+            while cpnode is not None:
+                if pollst.calpct(cpnode.lowp, PriceTarget) <= -2:
+                    self.analyst.setMonitoring(code, date, PriceTarget, flag=False)
+                    umonitor = True
+                    break
+                if pollst.calpct(cpnode.closep, PriceTarget) >= 15 and mvday >= 3:
+                    #todo adjust monitor price
+                    self.analyst.setMonitoring(code, date, PriceTarget, flag=False)
+                    umonitor = True
+                    break
+                cpnode = cpnode.next
+                mvday = mvday + 1
+            if not umonitor:
+                 self.analyst.setMonitoring(code, date, PriceTarget)
     def updateMonitorSet(self, line=12):
         trade_date = datetime.datetime.now().strftime('%Y%m%d')
         lasttrade = trade_date
-        if not self.tradedate.isTrade(trade_date):
+        dtflag = self.tradedate.isTrade(trade_date) 
+        if dtflag == 0:
             lasttrade = self.tradedate.getlasttrade(trade_date)
+        elif dtflag == -1:
+            lasttrade = self.tradedate.getDBRange(bg=False)
         count = 1
         while count < line:
             count = count + 1
             lasttrade = self.tradedate.getlasttrade(lasttrade)
+        self.updateMonitorSetByDay(lasttrade, trade_date)
+        '''
         df = self.analyst.fetchDataEntry(lasttrade)
         val='False'
         wdf = df.query('result==@val')
@@ -376,12 +486,16 @@ class storeoperator:
                         self.analyst.setMonitoring(code, date,PriceTarget, flag=False)
             else:
                 self.analyst.setMonitoring(code, date,PriceTarget)
-                
+            '''
+
     def getMonitorSet(self, line=12):
         trade_date = datetime.datetime.now().strftime('%Y%m%d')
         lasttrade = trade_date
-        if not self.tradedate.isTrade(trade_date):
+        dtflag = self.tradedate.isTrade(trade_date)
+        if self.tradedate.isTrade(trade_date) == 0:
             lasttrade = self.tradedate.getlasttrade(trade_date)
+        elif dtflag == -1:
+            lasttrade = self.tradedate.getDBRange(bg=False)
         count = 1
         while count < line:
             count = count + 1
@@ -398,12 +512,6 @@ class storeoperator:
         else:
             return df.query('Monitorflag==1')
 
-    def pdavailable(self, code, date, offset=0):
-        dyoffset = offset + 2
-        entry = self.dystore.getrecInfo(code, date, dyoffset)
-        if entry is None:
-            return False
-        return True
     def checkpredict(self,code, date,thresh=2.5):
         entry = self.dystore.loadEntry(code, date, line=12, prv=False)
         entsize = len(entry['trade_date'].get_values())
@@ -438,21 +546,8 @@ class storeoperator:
         if rpct >= thresh or rpcdt >= thresh:
             return True
         return False
-    def checkright(self,code, date,thresh=2.5):
-        entry = self.dystore.getrecInfo(code, date, 2)
-        if entry is None:
-            return False
-        if not entry.empty and entry['pct_chg'].get_values()[0] >= thresh:
-            return True
-        return False
-    def checkp(self,code, date,thresh=2.5):
-        entry = self.dystore.getrecInfo(code, date, 2)
-        entry2 = self.dystore.getrecInfo(code, date, 3)
-        if entry is None or entry2 is None:
-            return False
-        if (entry2['pct_chg'].get_values()[0] + entry['pct_chg'].get_values()[0]) > 0 \
-            and entry2['pct_chg'].get_values()[0] >= thresh:
-            return True
+
+    
     def genresultfld(self, code, date):
         resdic={}
         resdic['ts_code'] = code
@@ -517,15 +612,17 @@ class storeoperator:
         resdic['closerate'] = rpct
         resdic['pctchgrate'] = rpcdt
         return resdic
-    def saveanadb(self, code, trade_date, matchRule, predresult):
+    def saveanadb(self, code, trade_date, matchRule, predresult, price=0):
         #df = self.dystore.getrecInfo(code, trade_date, offset=0)
         entrydic = {}
         entrydic['code'] = code
         entrydic['trade_date'] = trade_date
         entrydic['match_rule'] = matchRule
         entrydic['result']  = predresult
+        entrydic['Pricetarget'] = price
         entrydic['lastupdated'] = datetime.datetime.now().strftime('%Y%m%d')
         self.analyst.saveRec(entrydic)
+
     def getMfLowPrice(self, code, trade_date, refprice):
         entry = self.dystore.loadEntry(code, trade_date, line=12, prv=False)
         if entry is None or entry.empty:
@@ -614,7 +711,7 @@ class storeoperator:
         if cchg > 0 and pchg <= 4 and (cchg+pchg)<11:
             mnprice = min(dfprev['open'].get_values()[0],dfprev['close'].get_values()[0]) 
             hgprice = max(dfprev['open'].get_values()[0],dfprev['close'].get_values()[0])
-            if pchg > 0 and (cchg+pchg) >= 3:  
+            if (pchg > 0 or (pchg < 0 and cchg >9.9)) and (cchg+pchg) >= 3 :  
                 retval = round((dfprev['high'].get_values()[0]+hgprice)/2, 2) 
             else:
                 retval = round((dfprev['low'].get_values()[0]+mnprice)/2, 2) 
@@ -631,7 +728,9 @@ class storeoperator:
     def calrate(self, code, date=''):
         prvmavar = None
         curmavar = None
-
+        df = self.dystore.getrecInfo(code, date, offset=0)
+        if df is None:
+            return False
         entrydf =  self.dystore.loadEntry(code, date, 15)
         dybdf = self.dybstore.loadEntry(code, date, 15)
         #mfentry = self.mfstore.loadEntry(code, date, 15)
@@ -791,7 +890,52 @@ class storeoperator:
                 madf = madf.append(pd.DataFrame.from_records(dicitem,index=[0]))
         newpd = pd.merge(newpd, madf,  on=['ts_code','trade_date'])
         return newpd
-    
+    def calup(self, code, date):
+        cpo = self.buildposts(code, date, node = 7)
+        if cpo is None or cpo.closep<=7 or cpo.pct_chg > 5:
+            return False
+        stdbr = cpo.getzPoint()
+        baser = stdbr
+        ppo = cpo.prev
+        mv = 0
+        cflag = False
+        vcount = 0
+        while ppo is not None and vcount <=3:
+            if vcount == 2:
+                cflag = True
+            
+            if ppo.getzPoint() < baser:
+                vcount = vcount + 1
+            if vcount > 2:
+                break
+            if vcount == 2 and cflag == True:
+                cflag = False
+                break
+            if ppo.pct_chg > 9.9 or ppo.neg:
+                cflag = True
+                break
+            
+            baser = ppo.getzPoint()
+            iclose = ppo.closep
+            ppo = ppo.prev
+            mv = mv + 1
+            if mv > vcount:
+                cflag = True
+                break
+        if cflag or cpo.pct_chg <= -0.5:
+            return False
+        if (cpo.closep - iclose)/iclose < 0.02 or (cpo.closep - iclose)/iclose > 0.08:
+            return  False
+        if cpo.upline >= 1.6:
+            return False
+        self.saveanadb(code, date, 'strategy2', 'True', stdbr)
+
+    def getUpMonSet(self, trade_date = None):
+        curdt = trade_date
+        if trade_date is None:
+            curdt = datetime.datetime.now().strftime('%Y%m%d')
+        df = self.analyst.loadData(trade_date=curdt, rule='strategy2')
+        return df
     def gendstk(self, code, date):
         dyoffset = 2
         dyentry = self.dystore.getrecInfo(code, date, dyoffset)
@@ -910,70 +1054,7 @@ class storeoperator:
                 madf = madf.append(pd.DataFrame.from_records(dicitem,index=[0]))
         newpd = pd.merge(newpd, madf,  on=['ts_code','trade_date'])
         return newpd
-    def testrule(self, date=''):
-        rdate = date
-        thresh=5
-        if date == '':
-            rdate = datetime.datetime.now().strftime('%Y%m%d')
-        df = self.bgstock.loadallstock()
-        mdf = None
-        print('start')
-        for i in range(0, df.index.size):
-            bstockdic = df.iloc[i].to_dict()
-            code = bstockdic['symbol']
-            if not self.pdavailable(code, rdate) or not self.checkright(code, rdate,thresh):
-                continue
-            if not self.calrate(code,rdate):
-                print('rule not applied for [' + code +']') 
-        print('done')
 
-    def genstduyhgstock(self, date=''):
-        rdate = date
-        thresh=5
-        if date == '':
-            rdate = datetime.datetime.now().strftime('%Y%m%d')
-        df = self.bgstock.loadallstock()
-        mdf = None
-        print('start')
-        for i in range(0, df.index.size):
-            bstockdic = df.iloc[i].to_dict()
-            code = bstockdic['symbol']
-            if not self.pdavailable(code, rdate) or not self.checkright(code, rdate,thresh):
-                continue
-            tmpdf = self.gendstk(code,rdate)
-            if tmpdf.empty:
-                continue
-            if mdf is None:
-                mdf = tmpdf
-            else:
-                mdf = mdf.append(tmpdf)
-            print("code:"+ code + " done")
-        if mdf is None:
-            print("not available for " + rdate)
-            return False
-        mdf.to_excel('validate' + rdate + '.xlsx')
-        print('done')
-    
-    def genhgstockinfo(self, date=''):
-            rdate = date
-            if date == '':
-                rdate = datetime.datetime.now().strftime('%Y%m%d')
-            df = self.bgstock.loadallstock()
-            mdf = None
-            print('start')
-            for i in range(0, df.index.size):
-                bstockdic = df.iloc[i].to_dict()
-                code = bstockdic['symbol']
-                tmpdf = self.generateStockInfo(code,rdate)
-                if tmpdf.empty:
-                    continue
-                if mdf is None:
-                    mdf = tmpdf
-                else:
-                    mdf = mdf.append(tmpdf)
-                print("code:"+ code + " done")
-            mdf.to_excel('allhigh' + rdate + '.xlsx')
-            print('done')
         
     def findpattern(self):
         df = self.bgstock.loadallstock()
@@ -991,27 +1072,119 @@ class storeoperator:
             print("code:"+ code + " done")
         mdf.to_excel('allhigh.xlsx')
         print('done')
-    def findsuit(self, date=''):
+    def getMostAccDays(self, date):
         rdate = date
         if date == '':
             rdate = datetime.datetime.now().strftime('%Y%m%d')
+        curst, curend = self.dystore.getStoreTMRange()
+        if curend <= rdate:
+            return curend
+        if curst >= date:
+            return curst
+        dtflag = self.tradedate.isTrade(rdate) 
+        if dtflag == 0:
+            rdate = self.tradedate.getlasttrade(rdate)        
+        return rdate
+
+    def findsuit(self, date=''):
+        rdate = self.getMostAccDays(date)
         df = self.bgstock.loadallstock()
         resdf = None
         vv=0
         for i in range(0, df.index.size):
             bstockdic = df.iloc[i].to_dict()
             code = bstockdic['symbol']
-            if self.calrate(code, rdate) and self.debug:
-                dicitem=self.genresultfld(code, rdate)
-                if resdf is None:
-                    resdf = pd.DataFrame.from_records(dicitem,index=[vv])
-                else:
-                    resdf = resdf.append(pd.DataFrame.from_records(dicitem,index=[vv]), sort=False)
-                vv = vv + 1
-        if not resdf is None:
-            resdf.to_excel('findsuitinfo' + rdate + '.xlsx')
+            self.calrate(code, rdate)
+            self.calup(code, rdate)
 
             #self.calHigh(code, rdate)    
+    def loaddystorebyQuery(self, query):
+        return self.dystore.mgquery(query)
+
+    def buildposts(self, code, date, node = 5, both = 0):
+        df = self.dystore.getrecInfo(code, date, offset=0)
+        if df is None:
+            return None
+        c = node
+        basenode = pollst(code, date)
+        basenode.buildfromdf(df)
+        curnode = basenode
+        while c > 0 and both <=0:
+            newoffset = c - node - 1
+            tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
+            if tmpdf is None:
+                break
+            tmppost = pollst(code, tmpdf['trade_date'].get_values()[0])
+            tmppost.buildfromdf(tmpdf)
+            curnode.prev = tmppost
+            tmppost.next = curnode
+            curnode = tmppost
+            c = c - 1
+        c = node
+        curnode = basenode
+        while c > 0 and both >=0:
+            newoffset = node - c + 1
+            tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
+            if tmpdf is None:
+                break
+            tmppost = pollst(code, tmpdf['trade_date'].get_values()[0])
+            tmppost.buildfromdf(tmpdf)
+            curnode.next = tmppost
+            tmppost.prev = curnode
+            curnode = tmppost
+            c = c - 1
+        return basenode
+
+    '''
+             or \
+                (cpo.prev.pct_chg <= 0 and cpo.pct_chg >= 4 and pollst.calpct(cpo.prev.highp, cpo.openp) > 1):
+    ''' 
+    def adjustmonprice(self, code, mondate):
+        retval = None
+        cpo = self.buildposts(code, mondate, node=2)
+        if cpo is None or cpo.prev is None or cpo.prev.prev is None:
+            return retval
+        cbchg = (cpo.pct_chg + cpo.prev.pct_chg)
+        if cbchg>=15:
+            if cpo.lowp > cpo.prev.closep:
+                retval = round(cpo.closep * (100-cpo.pct_chg)/100, 2)
+            else:
+                retval = (cpo.prev.closep + cpo.lowp)/2
+
+            if cpo.pct_chg>9.9:
+                retval = round(cpo.closep * (100-cpo.pct_chg)/100, 2)
+
+            if cpo.prev.prev.pct_chg > 9.9:
+                retval = round((cpo.prev.prev.closep + cpo.prev.prev.openp)/2, 2)
+            return retval
+
+        if cbchg < 15 and cbchg >=11:
+            retval = round(cpo.closep* (100 - cbchg/2)/100, 2)
+            return retval
+
+        if cpo.pct_chg > 0 and cpo.prev.pct_chg <= 4 and cbchg < 11:
+            hgprice = max(cpo.prev.openp, cpo.prev.closep) 
+            mnprice = min(cpo.prev.openp, cpo.prev.closep) 
+            if (cpo.prev.pct_chg > 0 or (cpo.prev.pct_chg < 0 and cpo.pct_chg > 9)) and cbchg >= 3:
+                retval = round((cpo.prev.highp + hgprice)/2, 2) 
+            
+            else:
+                retval =  round((cpo.prev.lowp + mnprice)/2, 2) 
+            if cpo.pct_chg > 5 and cpo.prev.pct_chg < -5:
+                if min(cpo.openp, cpo.closep) > max(cpo.prev.openp, cpo.prev.closep):
+                    retval = round(cpo.closep * (100 - cpo.pct_chg/2)/100)
+            
+            return retval 
+        
+        if cpo.pct_chg > 0 and cpo.prev.pct_chg > 4 and cbchg < 11:
+            if cpo.prev.pct_chg < 9:
+                hgprice = max(cpo.prev.prev.openp, cpo.prev.prev.closep)  
+                retval = round(hgprice, 2) 
+            else:
+                retval = round(cpo.closep* (100 - cbchg/2)/100, 2)
+            return retval 
+        return retval 
+
 class bgstockInfo:
     def __init__(self, mgclient= MongoClient('mongodb://localhost:27017/')['stock']):
         self.mongoClient = mgclient

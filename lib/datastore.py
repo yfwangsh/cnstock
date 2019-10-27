@@ -3,9 +3,12 @@ import tushare as ts
 import pandas as pd
 import numpy
 import datetime
+import time
 import unittest
 import threading
 import copy
+from bs4 import BeautifulSoup
+import requests
 
 class Singleton(object):
     _instance_lock = threading.Lock()
@@ -33,7 +36,7 @@ class Analystpool(dbbase):
         super(Analystpool, self).__init__(mgclient)
         self.collection='analystpool'
         self.keydictarray=['code','trade_date']
-    def setMonitoring(self, code, trade_date, mprice, flag=True):
+    def setMonitoring(self, code, trade_date, mprice, flag=True, rule='strategy1'):
         storeset = self.mongoClient[self.collection]
         monitor = 0
         if flag:
@@ -46,8 +49,9 @@ class Analystpool(dbbase):
         keydic={}
         keydic[self.keydictarray[0]] = code
         keydic[self.keydictarray[1]] = trade_date
+        keydic['match_rule'] = rule
         storeset.update_one(keydic,{'$set': updic}, upsert=True)
-    def setManualFlag(self, code, trade_date, mprice, fmflag=False):
+    def setManualFlag(self, code, trade_date, mprice, fmflag=False, rule='strategy1'):
         storeset = self.mongoClient[self.collection]
         updic = {}
         if mprice is not None:
@@ -63,6 +67,7 @@ class Analystpool(dbbase):
         keydic={}
         keydic[self.keydictarray[0]] = code
         keydic[self.keydictarray[1]] = trade_date
+        keydic['match_rule'] = rule
         storeset.update_one(keydic,{'$set': updic}, upsert=True)
 
     def saveRec(self,dicrec):
@@ -72,21 +77,23 @@ class Analystpool(dbbase):
         for dickey in self.keydictarray:
             keydic[dickey] = dicrec[dickey]
             del cpdict[dickey]
+        keydic['match_rule'] = dicrec['match_rule']
+        del cpdict['match_rule']
         storeset.update_one(keydic,{'$setOnInsert': {'upflag':1}, '$set':cpdict}, upsert=True)
-    def loadData(self,trade_date):
-        query = {self.keydictarray[1]: trade_date }
+    def loadData(self,trade_date, rule='strategy1'):
+        query = {self.keydictarray[1]: trade_date, 'match_rule': rule }
         df = stockInfoStore.smgquery(self.mongoClient,self.collection, query)
         return df
-    def fetchDataEntryByCode(self, code):
-        query = {self.keydictarray[0]: code }
+    def fetchDataEntryByCode(self, code, rule='strategy1' ):
+        query = {self.keydictarray[0]: code, 'match_rule': rule }
         df = stockInfoStore.smgquery(self.mongoClient,self.collection, query)
         return df
 
-    def fetchDataEntry(self,trade_date, end_date=None):
+    def fetchDataEntry(self,trade_date, end_date=None, rule='strategy1'):
         rdate = end_date
         if end_date is None:
             rdate = datetime.datetime.now().strftime('%Y%m%d')
-        query = {self.keydictarray[1]: {"$gte":trade_date, "$lte":rdate} }
+        query = {self.keydictarray[1]: {"$gte":trade_date, "$lte":rdate} ,'match_rule': rule }
         df = stockInfoStore.smgquery(self.mongoClient,self.collection, query)
         return df
 '''
@@ -112,14 +119,29 @@ class stockInfoStore:
     def canoncode(code):
         proquerycode = code
         if code.startswith('6'):
-            proquerycode= proquerycode + ".SH"
-        elif code.startswith('0') or code.startswith('3'):
-            proquerycode= proquerycode + ".SZ"
+            if not code.endswith('.SH'):
+                proquerycode= proquerycode + ".SH"
+        elif code.startswith('0') or code.startswith('3') :
+            if not code.endswith('.SZ'):
+                proquerycode= proquerycode + ".SZ"
         elif code=='SSE' or code=='SZSE':
             pass
         else:
             raise Exception('unknow stock code')
         return proquerycode
+    @staticmethod
+    def snfmcode(code):
+        proquerycode = code
+        if code.startswith('6'):
+            proquerycode= 'sh' + proquerycode
+        elif code.startswith('0') or code.startswith('3') :
+            proquerycode= 'sz' + proquerycode
+        elif code=='sh' or code=='sz':
+            pass
+        else:
+            raise Exception('unknow stock code')
+        return proquerycode
+        
     @staticmethod
     def getshiftday(day,offset,fmt='%Y%m%d'):
         '''
@@ -411,6 +433,68 @@ class tickdataStore(stockInfoStore):
             return tmpdf
         except AssertionError as err:
             print(str(err)) 
+    def clawtickdata(self, code , date):
+        ccode = stockInfoStore.snfmcode(code)
+        ipg = 1
+        targetUrl = 'http://market.finance.sina.com.cn/transHis.php?symbol=' + ccode + '&date=' + date + '&page='
+        my_headers = {
+        'User-Agent' : 'Mozilla/5.0 (iPhone; CPU iPhone OS 10_3 like Mac OS X) AppleWebKit/600.1.4 (KHTML, like Gecko) Mobile/12H143',
+        'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Encoding' : 'gzip',
+        'Accept-Language' : 'zh-CN,zh;q=0.8,en;q=0.6,zh-TW;q=0.4'
+        }
+        fdn_list = []
+        try:
+            while True:
+                fturl = targetUrl + str(ipg)
+                sss = requests.Session()
+                r = sss.get(fturl, headers = my_headers)  
+                r.encoding = 'gb2312'
+                soup = BeautifulSoup(r.text, 'lxml') 
+                tables = soup.select('table')
+                df_list = []
+                for table in tables:
+                    df_list.append(pd.concat(pd.read_html(table.prettify())))
+                df = pd.concat(df_list)
+                newdf = df.rename(index=str,columns={"成交时间":"time", "成交价":"price", "价格变动":"change", "成交量(手)": "volume", "成交额(元)":"amount","性质":"type"})
+                if newdf.empty:
+                    break
+                fdn_list.append(newdf.replace('--', 0))
+                ipg = ipg + 1
+                time.sleep(0.1)
+            fndf = pd.concat(fdn_list)
+            fndf.reset_index(drop=True, inplace=True)
+            return fndf
+        except Exception as ex:
+            print('exception:' + str(ex))
+            return None
+    
+    def storefromClaw(self, code, date):
+        try:
+            datestart=datetime.datetime.strptime(date,'%Y%m%d')
+            ret = False
+            tkdtstring=datestart.strftime('%Y-%m-%d')
+            df = self.clawtickdata(code, tkdtstring)
+            if df is None:
+                return ret
+            arraydict = []                
+            for i in range(0, df.index.size):
+                tkdic = df.iloc[i].to_dict()
+                for k in tkdic.keys():
+                    if type(tkdic[k]) == numpy.int64:
+                        tkdic[k] = int(tkdic[k])
+                    if type(tkdic[k]) == numpy.float64:
+                        tkdic[k] = float(tkdic[k])
+                tkdic['ts_code'] =stockInfoStore.canoncode(code)
+                tkdic['trade_date'] =tkdtstring.replace('-','')
+                arraydict.append(tkdic)
+            tkset = self.mongoClient[self.collection]
+            tkset.insert_many(arraydict)
+            ret = True
+            return ret
+        except AssertionError as err:
+            print(str(err))
+
     def storeProcess(self, code, stdate, eddate,src,updateflag):
         try:
             datestart=datetime.datetime.strptime(stdate,'%Y%m%d')
