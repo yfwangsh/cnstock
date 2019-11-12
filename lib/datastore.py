@@ -36,7 +36,7 @@ class Analystpool(dbbase):
         super(Analystpool, self).__init__(mgclient)
         self.collection='analystpool'
         self.keydictarray=['code','trade_date']
-    def setMonitoring(self, code, trade_date, mprice, flag=True, rule='strategy1'):
+    def setMonitoring(self, code, trade_date, mprice, flag=True, rule='strategy1', dtkey=True):
         storeset = self.mongoClient[self.collection]
         monitor = 0
         if flag:
@@ -48,10 +48,20 @@ class Analystpool(dbbase):
         updic['lastupdated'] = datetime.datetime.now().strftime('%Y%m%d')
         keydic={}
         keydic[self.keydictarray[0]] = code
-        keydic[self.keydictarray[1]] = trade_date
+        if dtkey:
+            keydic[self.keydictarray[1]] = trade_date
+        else:
+            updic[self.keydictarray[1]] = trade_date
         keydic['match_rule'] = rule
         storeset.update_one(keydic,{'$set': updic}, upsert=True)
-    def setManualFlag(self, code, trade_date, mprice, fmflag=False, rule='strategy1'):
+    def removeRec(self, code, rule='strategy1', trade_date=None):
+        storeset = self.mongoClient[self.collection]
+        query = {'code': code, 'match_rule': rule}
+        if trade_date is not None:
+            query = {'code': code, 'match_rule': rule, 'trade_date': trade_date}
+        x = storeset.delete_many(query)
+        return x.deleted_count
+    def setManualFlag(self, code, trade_date, mprice, fmflag=False, rule='strategy1', dtkey=True):
         storeset = self.mongoClient[self.collection]
         updic = {}
         if mprice is not None:
@@ -66,7 +76,10 @@ class Analystpool(dbbase):
         updic['lastupdated'] = datetime.datetime.now().strftime('%Y%m%d')
         keydic={}
         keydic[self.keydictarray[0]] = code
-        keydic[self.keydictarray[1]] = trade_date
+        if dtkey:
+            keydic[self.keydictarray[1]] = trade_date
+        else:
+            updic[self.keydictarray[1]]
         keydic['match_rule'] = rule
         storeset.update_one(keydic,{'$set': updic}, upsert=True)
 
@@ -80,8 +93,10 @@ class Analystpool(dbbase):
         keydic['match_rule'] = dicrec['match_rule']
         del cpdict['match_rule']
         storeset.update_one(keydic,{'$setOnInsert': {'upflag':1}, '$set':cpdict}, upsert=True)
-    def loadData(self,trade_date, rule='strategy1'):
+    def loadData(self,trade_date, rule='strategy1', dtkey=True):        
         query = {self.keydictarray[1]: trade_date, 'match_rule': rule }
+        if not dtkey:
+            query =  {'match_rule': rule }
         df = stockInfoStore.smgquery(self.mongoClient,self.collection, query)
         return df
     def fetchDataEntryByCode(self, code, rule='strategy1' ):

@@ -405,6 +405,45 @@ class storeoperator:
         if not value is None and value =='False':
             return False
         return True
+    def rtupdateUpmonSet(self, dt=None):
+        trade_date = dt
+        if dt is None: 
+            trade_date = datetime.datetime.now().strftime('%Y%m%d')
+        dtflag = self.tradedate.isTrade(trade_date) 
+        if not dtflag == 1:
+            return
+        lasttrade = self.tradedate.getlasttrade(trade_date)
+        df = self.getUpMonSet(lasttrade)
+        for rr in df.itertuples(index=False):
+            mydict = rr._asdict()
+            code = mydict['code']
+            date = mydict['trade_date']
+            price = mydict['Pricetarget']
+            edf = self.getRealQuote(code)
+            name = edf['name'].get_values()[0]
+            openp = float(edf['open'].get_values()[0])
+            if (openp - price)/price > 0.005:
+                self.analyst.setMonitoring(code, date, price, flag=True, rule='strategy2')               
+            else:
+                self.analyst.setMonitoring(code, date, price, flag=False, rule='strategy2')
+
+
+    def updateUpmonSet(self, date):
+        df = self.getUpMonSet(date)
+        if df is None or df.empty:
+            return
+        for rr in df.itertuples(index=False):
+            mydict = rr._asdict()
+            code = mydict['code']
+            date = mydict['trade_date']
+            price = mydict['Pricetarget']
+            basenode = self.buildposts(code, date, node=2)
+            if basenode.next is not None:
+                if (basenode.next.openp - price)/price > 0.005:
+                    self.analyst.setMonitoring(code, date, price, flag=True, rule='strategy2')               
+                else:
+                    self.analyst.setMonitoring(code, date, price, flag=False, rule='strategy2')
+
     def updateMonitorSetByDay(self, start_date, end_date):
         df = self.analyst.fetchDataEntry(start_date, end_date)
         val='False'
@@ -501,16 +540,26 @@ class storeoperator:
             count = count + 1
             lasttrade = self.tradedate.getlasttrade(lasttrade)
         df = self.analyst.fetchDataEntry(lasttrade)
-        if 'fmflag' in df.columns:
-            return df.query('Monitorflag==1 or fmflag==1')
+        if 'Monitorflag' in df.columns:
+            if 'fmflag' in df.columns:
+                return df.query('Monitorflag==1 or fmflag==1')
+            else:
+                return df.query('Monitorflag==1')
         else:
-            return df.query('Monitorflag==1')
+            if df.empty:
+                return df
+            return None
     def getMonitorDaySet(self, date):
         df = self.analyst.loadData(date)
-        if 'fmflag' in df.columns:
-            return df.query('Monitorflag==1 or fmflag==1')
+        if 'Monitorflag' in df.columns:
+            if 'fmflag' in df.columns:
+                return df.query('Monitorflag==1 or fmflag==1')
+            else:
+                return df.query('Monitorflag==1')
         else:
-            return df.query('Monitorflag==1')
+            if df.empty:
+                return df
+            return None
 
     def checkpredict(self,code, date,thresh=2.5):
         entry = self.dystore.loadEntry(code, date, line=12, prv=False)
@@ -612,7 +661,7 @@ class storeoperator:
         resdic['closerate'] = rpct
         resdic['pctchgrate'] = rpcdt
         return resdic
-    def saveanadb(self, code, trade_date, matchRule, predresult, price=0):
+    def saveanadb(self, code, trade_date, matchRule, predresult, price=0, monflag=None):
         #df = self.dystore.getrecInfo(code, trade_date, offset=0)
         entrydic = {}
         entrydic['code'] = code
@@ -620,6 +669,11 @@ class storeoperator:
         entrydic['match_rule'] = matchRule
         entrydic['result']  = predresult
         entrydic['Pricetarget'] = price
+        if monflag is not None:
+            monitor = 0
+            if monflag:
+                monitor = 1
+            entrydic['Monitorflag'] = monitor
         entrydic['lastupdated'] = datetime.datetime.now().strftime('%Y%m%d')
         self.analyst.saveRec(entrydic)
 
@@ -890,6 +944,29 @@ class storeoperator:
                 madf = madf.append(pd.DataFrame.from_records(dicitem,index=[0]))
         newpd = pd.merge(newpd, madf,  on=['ts_code','trade_date'])
         return newpd
+    def addCMonitor(self, code, trade_date=None):
+        curdt = trade_date
+        cpo = None
+        df = self.getCMonitorbyCode(code)
+        if not df.empty:
+            return
+        if trade_date is None:
+            curdt = datetime.datetime.now().strftime('%Y%m%d')
+        while cpo is None:
+            cpo = self.buildposts(code, curdt, node = 2)
+            curdt = self.tradedate.getlasttrade(curdt)
+        self.saveanadb(code, curdt, 'strategy3', 'True', cpo.highp, True)
+
+    def updateCMonitor(self, code, price, monflag=True):
+        date = datetime.datetime.now().strftime('%Y%m%d')
+        self.analyst.setMonitoring(code, date, price, flag=monflag, rule='strategy3', dtkey=False)
+    def getCMonitor(self):
+        df = self.analyst.loadData(trade_date='', rule='strategy3', dtkey=False)
+        return df 
+    def getCMonitorbyCode(self, code):
+        df = self.analyst.fetchDataEntryByCode(code, rule='strategy3')
+        return df 
+
     def calup(self, code, date):
         cpo = self.buildposts(code, date, node = 7)
         if cpo is None or cpo.closep<=7 or cpo.pct_chg > 5:

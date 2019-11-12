@@ -23,5 +23,5 @@ if __name__ == "__main__":
 
     stoper = storeoperator()
     stoper.filldailydb()
-
+    stoper.debug = False
     stoper.findsuit()
