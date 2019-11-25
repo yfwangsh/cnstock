@@ -14,7 +14,7 @@ class Singleton(object):
     _instance_lock = threading.Lock()
 
     def __init__(self):
-        ts.set_token("23b817c8b6e2b772f37ad6f5628ad348a0aefed07ed9b07ecc75976d")
+        ts.set_token("b5495988a3294331dda2b5c4a9bb7b9766f179863118c097e5296f60")
         self.pro = ts.pro_api()   
 
     def getPro(self):

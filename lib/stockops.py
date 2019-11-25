@@ -7,7 +7,11 @@ import unittest
 from .datastore import *
 import requests
 import json
-
+import hmac
+import hashlib
+import time
+import base64
+import urllib
 class pollst:
     def __init__(self, code, trade_date):
         self.upline = 0
@@ -122,6 +126,7 @@ class DingTalk_Base:
     def __init__(self):
         self.__headers = {'Content-Type': 'application/json;charset=utf-8'}
         self.url = ''
+        self.secret = ''
     def send_msg(self,text):
         json_text = {
             "msgtype": "text",
@@ -135,7 +140,17 @@ class DingTalk_Base:
                 "isAtAll": False
             }
         }
-        return requests.post(self.url, json.dumps(json_text), headers=self.__headers).content
+        if len(self.secret) == 0:
+            return requests.post(self.url, json.dumps(json_text), headers=self.__headers).content
+        timestamp = round(time.time()*1000)
+        secret_enc = bytes(self.secret.encode('utf-8'))
+        string_to_sign = '{}\n{}'.format(timestamp, self.secret)
+        string_to_sign_enc = bytes(string_to_sign.encode('utf-8'))
+        hmac_code = hmac.new(secret_enc, string_to_sign_enc, digestmod=hashlib.sha256).digest()
+        sign = urllib.parse.quote_plus(base64.b64encode(hmac_code))
+        signurl = self.url + '&timestamp=' + str(timestamp) + '&sign=' + sign
+        return requests.post(signurl, json.dumps(json_text), headers=self.__headers).content
+        
 class DingTalk(DingTalk_Base):
     def __init__(self):
         super().__init__()
@@ -143,6 +158,8 @@ class DingTalk(DingTalk_Base):
         self.url = ''
     def setURL(self, url):
         self.url = url
+    def initSec(self, secret):
+        self.secret = secret
 
 class tradeDate(stockInfoStore):
     def __init__(self,  mgclient= MongoClient('mongodb://localhost:27017/')['stock']):
