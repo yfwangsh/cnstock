@@ -153,8 +153,6 @@ class dtgenerator:
             code = bstockdic['symbol']
             retlist = retlist + self.gentrainforcode(code)
             print("code:"+ code + " done")
-            if random.randint(1,100) <= 20:
-                break
         mdf = pd.DataFrame.from_records(retlist)
         mdf.to_excel('tr.xlsx')
         print('done')
