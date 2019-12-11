@@ -9,14 +9,21 @@ import threading
 import copy
 from bs4 import BeautifulSoup
 import requests
+from configparser import ConfigParser
 
 class Singleton(object):
     _instance_lock = threading.Lock()
-
+    def getConf(self, section, key):
+        return self.config.get(section, key)
+    def initConf(self, file):
+        cp = ConfigParser()
+        cp.read(file)
+        return cp
     def __init__(self):
-        ts.set_token("b5495988a3294331dda2b5c4a9bb7b9766f179863118c097e5296f60")
         self.pro = ts.pro_api()   
-
+        self.config = self.initConf('conf/mystock.conf')
+        token = self.getConf('tushare', 'token')
+        ts.set_token(token)
     def getPro(self):
         return self.pro
     def __new__(cls, *args, **kwargs):
@@ -118,8 +125,6 @@ Has ts_code, trade_date
 class stockInfoStore:
     def __init__(self,mgclient):
         self.mongoClient = mgclient
-        #ts.set_token("23b817c8b6e2b772f37ad6f5628ad348a0aefed07ed9b07ecc75976d")
-        #self.pro = ts.pro_api()    
         self.pro = Singleton().getPro()
         self.collection =''
         self.keydictarray=['ts_code','trade_date']
@@ -381,18 +386,62 @@ class dailydataStore(stockInfoStore):
         if df.empty:
             print("can not caculate ma")
         mylist = df['close'].head(num).get_values()
-        return numpy.average(mylist)
+        return round(numpy.average(mylist),2)
+    '''
+    type: 
+    00 - close high
+    01 - close low
+    10 - high high
+    11 - high low
+    20 - open high
+    21 - open low
+    30 - low high
+    31 - low low
+    40 - vol high
+    41 - vol low
+    '''
+    def getppbound(self, code, trade_date, num=30, direct=0, type='00'):
+        query = {"ts_code": stockInfoStore.canoncode(code), "trade_date": trade_date  }
+        df = self.mgquery(query)
+        if df.empty:
+            #print("Not a trade date!")
+            return None
+        query = {"ts_code": stockInfoStore.canoncode(code), "trade_date": {"$lt":trade_date}  }
+        if not direct == 0:
+            query = {"ts_code": stockInfoStore.canoncode(code), "trade_date": {"$gt":trade_date}  }
+        sort = [("trade_date",-1)]
+        df = self.mgquery(query, sort)
+        if df.empty:
+            print("can not caculate")
+            return None
+        if type[0] == '0':
+            ctflg = 'close'
+        elif type[0] == '1':
+            ctflg = 'high' 
+        elif type[0] == '2':
+            ctflg = 'open' 
+        elif type[0] == '3':
+            ctflg = 'low' 
+        elif type[0] == '4':
+            ctflg = 'vol'
+        mylist = df[ctflg].head(num).get_values()
+        if not direct == 0:
+            mylist = df[ctflg].tail(num).get_values()
+        if type[1] == '0':
+            return numpy.max(mylist)
+        return numpy.min(mylist)
+    
     def getAvg(self, code, field, trade_date, num=100):
         entrys = self.loadEntry(code, trade_date, num)
         if entrys.empty:
             return None
-        return numpy.average(entrys[field])
+        return round(numpy.average(entrys[field]),2)
 
     def getStd(self, code, field, trade_date, num=100):
         entrys = self.loadEntry(code, trade_date, num)
         if entrys.empty:
             return None
-        return numpy.std(entrys[field])
+        return round(numpy.std(entrys[field]),2)
     
     def pesMa(self, code, price, trade_date='', num=5):
         assert(num > 0)

@@ -96,7 +96,7 @@ class pollst:
         ret  = (var - base)/base * 100
         if absflag:
             ret = abs(ret)
-        return ret 
+        return round(ret,3) 
     def getzPoint(self):
         return (self.openp + self.closep)/2
     def getType(self):
@@ -378,7 +378,7 @@ class storeoperator:
         self.valueField = 'paramvalue'
         self.paramThreadRun = 'PriceMonitorRuning'
         self.debug = True
-
+        self.conf = Singleton()
         self.dystore = dailydataStore(self.mongoClient)
         self.mfstore = moneyFlowdataStore(self.mongoClient)
         self.tkstore = tickdataStore(self.mongoClient)
@@ -504,46 +504,6 @@ class storeoperator:
             count = count + 1
             lasttrade = self.tradedate.getlasttrade(lasttrade)
         self.updateMonitorSetByDay(lasttrade, trade_date)
-        '''
-        df = self.analyst.fetchDataEntry(lasttrade)
-        val='False'
-        wdf = df.query('result==@val')
-        for rr in df.itertuples(index=False):
-            mydict = rr._asdict()
-            code = mydict['code']
-            date = mydict['trade_date']
-            if mydict.__contains__('mpflag') and mydict['mpflag']==1:
-                continue
-            centry = self.dystore.loadEntry(code, line=1)
-            lowmindic = self.lowPriceAfterDict(code, date)
-            PriceTarget = self.getProposed(code, date)
-            cprice = centry['close'].get_values()[0]
-            recentry = df.query('code==@code')
-            clsvar= round((PriceTarget - cprice)/PriceTarget * 100,2)
-            if not date == max(recentry['trade_date']):
-                self.analyst.setMonitoring(code, date, PriceTarget,False)
-                continue
-            if not lowmindic is None:
-                Pricelow = lowmindic['low']
-                if PriceTarget < Pricelow :
-                    varpct = round((PriceTarget - Pricelow)/PriceTarget * 100,2)
-                    if varpct > -10 and varpct < -0.3:
-                        self.analyst.setMonitoring(code, date,PriceTarget)
-                    else:
-                        
-                        if varpct >= -0.3 and varpct <= 1.5 and abs(clsvar)<=1.5:
-                            self.analyst.setMonitoring(code, date, PriceTarget)
-                        else:
-                            self.analyst.setMonitoring(code, date, PriceTarget, flag=False)
-                else:
-                    if abs(clsvar)<=1.5:
-                        self.analyst.setMonitoring(code, date,PriceTarget)
-                    else:
-                        self.analyst.setMonitoring(code, date,PriceTarget, flag=False)
-            else:
-                self.analyst.setMonitoring(code, date,PriceTarget)
-            '''
-
     def getMonitorSet(self, line=12):
         trade_date = datetime.datetime.now().strftime('%Y%m%d')
         lasttrade = trade_date
