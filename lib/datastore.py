@@ -20,10 +20,10 @@ class Singleton(object):
         cp.read(file)
         return cp
     def __init__(self):
-        self.pro = ts.pro_api()   
         self.config = self.initConf('conf/mystock.conf')
         token = self.getConf('tushare', 'token')
         ts.set_token(token)
+        self.pro = ts.pro_api()   
     def getPro(self):
         return self.pro
     def __new__(cls, *args, **kwargs):
