@@ -32,11 +32,11 @@ class dtgenerator:
         rec = dystore.getrecInfo(code, date,0)
         if rec is None or rec.empty:
             return None     
-        cprice = rec['close'].get_values()[0]
-        cvol = rec['vol'].get_values()[0]
-        clow = rec['low'].get_values()[0]
-        chigh = rec['high'].get_values()[0]
-        pct = rec['pct_chg'].get_values()[0]
+        cprice = rec['close'].to_numpy()[0]
+        cvol = rec['vol'].to_numpy()[0]
+        clow = rec['low'].to_numpy()[0]
+        chigh = rec['high'].to_numpy()[0]
+        pct = rec['pct_chg'].to_numpy()[0]
         ma5 = dystore.getMa(code, date, 5)
         ma10 = dystore.getMa(code, date, 10)
         ma15 = dystore.getMa(code, date, 15)
@@ -51,7 +51,7 @@ class dtgenerator:
         fmaxhigh = dystore.getppbound(code, date, direct=1, num = 5, type='10')
         if pmaxclose is None or pmaxhigh is None or pminlow is None or fmaxhigh is None:
             return None
-        prvdt = dystore.getrecInfo(code, date, -1)['trade_date'].get_values()[0]
+        prvdt = dystore.getrecInfo(code, date, -1)['trade_date'].to_numpy()[0]
         pavgvol10 = dystore.getAvg(code, 'vol', prvdt, num=10)
 
         if self.debug:
@@ -101,7 +101,7 @@ class dtgenerator:
         fwdchk = self.operator.dystore.getrecInfo(code, date, 5)
         if prvchk is None or fwdchk is None:
             return False
-        if exdate <= fwdchk['trade_date'].get_values()[0] and exdate >= prvchk['trade_date'].get_values()[0]:
+        if exdate <= fwdchk['trade_date'].to_numpy()[0] and exdate >= prvchk['trade_date'].to_numpy()[0]:
             if stkdiv >= 0.1 or cashdiv/price >= 0.01:
                 return False
         return True

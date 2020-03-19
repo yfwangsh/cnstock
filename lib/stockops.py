@@ -48,13 +48,13 @@ class pollst:
         self.jump = pct_chg > 0 and (lowp - closep/(1+pct_chg/100))>0 
 
     def buildfromdf(self, df):
-        openp = df['open'].get_values()[0]
-        closep = df['close'].get_values()[0]
-        highp = df['high'].get_values()[0]
-        lowp = df['low'].get_values()[0]
-        pct_chg = df['pct_chg'].get_values()[0]
-        vol = df['vol'].get_values()[0]
-        amount = df['amount'].get_values()[0]
+        openp = df['open'].to_numpy()[0]
+        closep = df['close'].to_numpy()[0]
+        highp = df['high'].to_numpy()[0]
+        lowp = df['low'].to_numpy()[0]
+        pct_chg = df['pct_chg'].to_numpy()[0]
+        vol = df['vol'].to_numpy()[0]
+        amount = df['amount'].to_numpy()[0]
         self.buildpost(openp, closep, highp, lowp, pct_chg, vol, amount)
     def getNode(self, date):
         if self.trade_date == date:
@@ -263,13 +263,13 @@ class stockopStore(stockInfoStore):
         '''
         achigh= df.loc[df['price'].idxmax()].at['price'] 
         aclow =  df.loc[df['price'].idxmin()].at['price']
-        high = df1.get("high").get_values()[0]
-        low = df1.get("low").get_values()[0]
+        high = df1.get("high").to_numpy()[0]
+        low = df1.get("low").to_numpy()[0]
         '''
         开盘价和收盘价
         '''
-        closep = df1.get("close").get_values()[0]
-        openp = df1.get("open").get_values()[0]
+        closep = df1.get("close").to_numpy()[0]
+        openp = df1.get("open").to_numpy()[0]
         
         '''
         振幅，开盘价为基数
@@ -290,21 +290,21 @@ class stockopStore(stockInfoStore):
         df3 = df.query('price<=@vlow').assign(type='L')
         df4 = df2.append(df3).sort_values(by=['time'])
         
-        knowopdic['highstart'] = df2['time'].head(1).get_values()[0]
-        knowopdic['highend'] = df2['time'].tail(1).get_values()[0]
-        knowopdic['lowstart'] = df3['time'].head(1).get_values()[0]
-        knowopdic['lowend'] = df3['time'].tail(1).get_values()[0]
+        knowopdic['highstart'] = df2['time'].head(1).to_numpy()[0]
+        knowopdic['highend'] = df2['time'].tail(1).to_numpy()[0]
+        knowopdic['lowstart'] = df3['time'].head(1).to_numpy()[0]
+        knowopdic['lowend'] = df3['time'].tail(1).to_numpy()[0]
         tmhighend = knowopdic['highend'] 
         tmlowstart = knowopdic['lowstart']
         df5 = df.query('time>=@tmhighend').sort_values(by=['price'])
         df6 = df.query('time<=@tmlowstart').sort_values(by=['price'])
-        knowopdic['highendtolow'] = df5['price'].head(1).get_values()[0]
-        knowopdic['lowstartbeforehigh'] = df6['price'].tail(1).get_values()[0]
-        trendstr = stockInfoStore.removeDups(df4['type'].get_values())
+        knowopdic['highendtolow'] = df5['price'].head(1).to_numpy()[0]
+        knowopdic['lowstartbeforehigh'] = df6['price'].tail(1).to_numpy()[0]
+        trendstr = stockInfoStore.removeDups(df4['type'].to_numpy())
         ndtradeinfo = self.dystore.getrecInfo(code, trade_date, 1)
         if ndtradeinfo is None:
             return None
-        nxhigh = ndtradeinfo.get("high").get_values()[0]
+        nxhigh = ndtradeinfo.get("high").to_numpy()[0]
         decval = ''
         knowopdic['ts_code']=stockInfoStore.canoncode(code)
         knowopdic['trade_date'] = trade_date
@@ -437,8 +437,8 @@ class storeoperator:
             date = mydict['trade_date']
             price = mydict['Pricetarget']
             edf = self.getRealQuote(code)
-            name = edf['name'].get_values()[0]
-            openp = float(edf['open'].get_values()[0])
+            name = edf['name'].to_numpy()[0]
+            openp = float(edf['open'].to_numpy()[0])
             if (openp - price)/price > 0.005:
                 self.analyst.setMonitoring(code, date, price, flag=True, rule='strategy2')               
             else:
@@ -540,7 +540,7 @@ class storeoperator:
 
     def checkpredict(self,code, date,thresh=2.5):
         entry = self.dystore.loadEntry(code, date, line=12, prv=False)
-        entsize = len(entry['trade_date'].get_values())
+        entsize = len(entry['trade_date'].to_numpy())
         if entry is None or entry.empty:
             return False
         if entsize <=2:
@@ -551,9 +551,9 @@ class storeoperator:
         maxptentry = entry.head(entsize).tail(entsize-2).query('pct_chg==@pctmax and trade_date>@date')
         if maxentry.empty or maxptentry.empty:
             return False
-        tptmax = maxptentry['close'].get_values()[0]
-        dt = maxentry['trade_date'].get_values()[0]
-        pdt = maxptentry['trade_date'].get_values()[0]
+        tptmax = maxptentry['close'].to_numpy()[0]
+        dt = maxentry['trade_date'].to_numpy()[0]
+        pdt = maxptentry['trade_date'].to_numpy()[0]
         tmpent = entry.head(entsize).tail(entsize-1).query('trade_date<@dt and trade_date>@date')
         tmpptent = entry.head(entsize).tail(entsize-1).query('trade_date<@pdt and trade_date>@date')
         if tmpent.empty or tmpptent.empty:
@@ -564,8 +564,8 @@ class storeoperator:
         minptentry = entry.head(entsize).tail(entsize-1).query('trade_date<@pdt and close==@lowptmin and trade_date>@date')
         if minentry.empty or minptentry.empty:
             return False
-        lowdt = minentry['trade_date'].get_values()[0]
-        lowpdt = minptentry['trade_date'].get_values()[0]
+        lowdt = minentry['trade_date'].to_numpy()[0]
+        lowpdt = minptentry['trade_date'].to_numpy()[0]
 
         rpct = round((tpmax - lowmin)/lowmin * 100, 2)
         rpcdt = round((tptmax-lowptmin)/lowptmin *100, 2)
@@ -584,8 +584,8 @@ class storeoperator:
         curentry = entry.query('trade_date==@date')
         if curentry.empty:
             return resdic
-        resdic['pct_chg'] = curentry['pct_chg'].get_values()[0]
-        entsize = len(entry['trade_date'].get_values())
+        resdic['pct_chg'] = curentry['pct_chg'].to_numpy()[0]
+        entsize = len(entry['trade_date'].to_numpy())
         if entsize <=2:
             return resdic
         tpmax = numpy.max(entry.head(entsize).tail(entsize-2)['close'])
@@ -596,12 +596,12 @@ class storeoperator:
         highentry = entry.head(entsize).tail(entsize-2).query('high==@tphigh and trade_date>@date')
         if maxentry.empty or maxptentry.empty or highentry.empty:
             return resdic
-        maxclosehigh = maxentry['high'].get_values()[0]
-        tptmax = maxptentry['close'].get_values()[0]
-        tpthigh = maxptentry['high'].get_values()[0]
-        dt = maxentry['trade_date'].get_values()[0]
-        pdt = maxptentry['trade_date'].get_values()[0]
-        highdt = highentry['trade_date'].get_values()[0]
+        maxclosehigh = maxentry['high'].to_numpy()[0]
+        tptmax = maxptentry['close'].to_numpy()[0]
+        tpthigh = maxptentry['high'].to_numpy()[0]
+        dt = maxentry['trade_date'].to_numpy()[0]
+        pdt = maxptentry['trade_date'].to_numpy()[0]
+        highdt = highentry['trade_date'].to_numpy()[0]
         tmpent = entry.head(entsize).tail(entsize-1).query('trade_date<@dt and trade_date>@date')
         tmpptent = entry.head(entsize).tail(entsize-1).query('trade_date<@pdt and trade_date>@date')
 
@@ -613,10 +613,10 @@ class storeoperator:
         minptentry = entry.head(entsize).tail(entsize-1).query('trade_date<@pdt and close==@closeptmin and trade_date>@date')
         if minentry.empty or minptentry.empty:
             return resdic
-        closelowdt = minentry['trade_date'].get_values()[0]
-        closelowpdt = minptentry['trade_date'].get_values()[0]
-        mincloselow =  minentry['low'].get_values()[0]
-        mincloselowp = minptentry['low'].get_values()[0]
+        closelowdt = minentry['trade_date'].to_numpy()[0]
+        closelowpdt = minptentry['trade_date'].to_numpy()[0]
+        mincloselow =  minentry['low'].to_numpy()[0]
+        mincloselowp = minptentry['low'].to_numpy()[0]
         resdic['minclosedate'] = closelowdt
         resdic['minclose'] =closemin
         resdic['mincloselow'] =mincloselow
@@ -658,9 +658,9 @@ class storeoperator:
         entry = self.dystore.loadEntry(code, trade_date, line=12, prv=False)
         if entry is None or entry.empty:
             return None
-        if len(entry.get_values()) <= 1:
+        if len(entry.to_numpy()) <= 1:
             return None
-        pentry = entry.tail(len(entry.get_values())-1)
+        pentry = entry.tail(len(entry.to_numpy())-1)
         lowmin =  numpy.min(pentry['low'])
         lowminentry = pentry.query('low==@lowmin')
         topp = round(refprice * 1.015,2)
@@ -669,12 +669,12 @@ class storeoperator:
         stentry = pentry.query('low<=@topp and low>=@lowp')
         if stentry.empty:
             retdic={}
-            retdic['trade_date'] = lowminentry['trade_date'].get_values()[0]
+            retdic['trade_date'] = lowminentry['trade_date'].to_numpy()[0]
             df = self.dystore.getrecInfo(code, retdic['trade_date'], offset=1)
             if df is None or df.empty:
                 return None
             retdic['pricelow'] = lowmin
-            retdic['pricelowchg'] = round((df['high'].get_values()[0] - lowmin)/lowmin*100,2)
+            retdic['pricelowchg'] = round((df['high'].to_numpy()[0] - lowmin)/lowmin*100,2)
             return retdic
         retdic= {}
         for rr in stentry.itertuples(index=False):     
@@ -683,7 +683,7 @@ class storeoperator:
             df = self.dystore.getrecInfo(code, date, offset=1)
             if df is None or df.empty:
                 continue
-            nhigh = df['high'].get_values()[0]
+            nhigh = df['high'].to_numpy()[0]
             clow = mydict['low']
             chgpt =  round((nhigh - clow) / clow * 100, 2)
             if not retdic.__contains__('pricelowchg') or chgpt > retdic['pricelowchg']:
@@ -697,30 +697,30 @@ class storeoperator:
         entry = self.dystore.loadEntry(code, trade_date, line=12, prv=False)
         if entry is None or entry.empty:
             return None
-        if len(entry.get_values()) <= 1:
+        if len(entry.to_numpy()) <= 1:
             return None
-        pentry = entry.tail(len(entry.get_values())-1)
+        pentry = entry.tail(len(entry.to_numpy())-1)
         lowmin = numpy.min(pentry['low'])        
         lowminentry = pentry.query('low==@lowmin')
         retdic = {}
         retdic['low'] = lowmin
-        retdic['lowdate'] = lowminentry['trade_date'].get_values()[0]
+        retdic['lowdate'] = lowminentry['trade_date'].to_numpy()[0]
         return retdic
     def lowPriceAfter(self, code, trade_date):
         entry = self.dystore.loadEntry(code, trade_date, line=12, prv=False)
         if entry is None or entry.empty:
             return None
-        if len(entry.get_values()) <= 1:
+        if len(entry.to_numpy()) <= 1:
             return None
-        return numpy.min(entry.tail(len(entry.get_values())-1)['low'])
+        return numpy.min(entry.tail(len(entry.to_numpy())-1)['low'])
     def getMatchedSellPrice(self, code, trade_date):
         entry = self.dystore.loadEntry(code, trade_date, line=12, prv=False)
         if entry is None or entry.empty:
             return None
-        if len(entry.get_values()) <= 1:
+        if len(entry.to_numpy()) <= 1:
             return None
     
-        return numpy.min(entry.tail(len(entry.get_values())-1)['low'])
+        return numpy.min(entry.tail(len(entry.to_numpy())-1)['low'])
     def getProposed(self, code, trade_date):
         retval = None
         df = self.dystore.getrecInfo(code, trade_date, offset=0)
@@ -728,32 +728,32 @@ class storeoperator:
         dfpprev = self.dystore.getrecInfo(code, trade_date, offset=-2)
         if df is None or dfprev is None or dfpprev is None:
             return retval
-        cchg = df['pct_chg'].get_values()[0]
-        pchg = dfprev['pct_chg'].get_values()[0]
+        cchg = df['pct_chg'].to_numpy()[0]
+        pchg = dfprev['pct_chg'].to_numpy()[0]
         
         if (cchg+pchg)>=15:
-            retval = round(df['low'].get_values()[0] * (100-cchg)/100, 2)
+            retval = round(df['low'].to_numpy()[0] * (100-cchg)/100, 2)
             return retval
 
         if (cchg+pchg)<15 and (cchg+pchg)>=11:
-            retval = round(df['close'].get_values()[0] * (100-(cchg+pchg)/2)/100, 2)
+            retval = round(df['close'].to_numpy()[0] * (100-(cchg+pchg)/2)/100, 2)
             return retval
 
         if cchg > 0 and pchg <= 4 and (cchg+pchg)<11:
-            mnprice = min(dfprev['open'].get_values()[0],dfprev['close'].get_values()[0]) 
-            hgprice = max(dfprev['open'].get_values()[0],dfprev['close'].get_values()[0])
+            mnprice = min(dfprev['open'].to_numpy()[0],dfprev['close'].to_numpy()[0]) 
+            hgprice = max(dfprev['open'].to_numpy()[0],dfprev['close'].to_numpy()[0])
             if (pchg > 0 or (pchg < 0 and cchg >9.9)) and (cchg+pchg) >= 3 :  
-                retval = round((dfprev['high'].get_values()[0]+hgprice)/2, 2) 
+                retval = round((dfprev['high'].to_numpy()[0]+hgprice)/2, 2) 
             else:
-                retval = round((dfprev['low'].get_values()[0]+mnprice)/2, 2) 
+                retval = round((dfprev['low'].to_numpy()[0]+mnprice)/2, 2) 
             return retval 
         
         if cchg > 0 and pchg > 4 and (cchg+pchg)<11:
             if pchg < 9:
-                hgprice = max(dfpprev['open'].get_values()[0],dfpprev['close'].get_values()[0])  
+                hgprice = max(dfpprev['open'].to_numpy()[0],dfpprev['close'].to_numpy()[0])  
                 retval = round(hgprice, 2) 
             else:
-                retval = round(df['close'].get_values()[0]* (100 - (cchg+pchg)/2)/100, 2)
+                retval = round(df['close'].to_numpy()[0]* (100 - (cchg+pchg)/2)/100, 2)
             return retval 
 
     def calrate(self, code, date=''):
@@ -767,14 +767,14 @@ class storeoperator:
         #mfentry = self.mfstore.loadEntry(code, date, 15)
         if entrydf.empty:
             return False
-        dtlist = entrydf['trade_date'].get_values()
+        dtlist = entrydf['trade_date'].to_numpy()
         size = len(dtlist)
         if size < 10:
             return False
         entrydf = pd.merge(entrydf, dybdf, on=['ts_code','trade_date'])
 
-        curdt = entrydf['trade_date'].tail(1).get_values()[0]
-        prvdt = entrydf['trade_date'].tail(2).get_values()[0]
+        curdt = entrydf['trade_date'].tail(1).to_numpy()[0]
+        prvdt = entrydf['trade_date'].tail(2).to_numpy()[0]
         if date == '':
             date = datetime.datetime.now().strftime('%Y%m%d')
         if (datetime.datetime.strptime(date,'%Y%m%d') - datetime.datetime.strptime(curdt,'%Y%m%d')) > 10*datetime.timedelta(days=1):
@@ -783,7 +783,7 @@ class storeoperator:
         cmavar = (self.dystore.getMa(code, curdt) - self.dystore.getMa(code,curdt,10))/self.dystore.getMa(code,curdt,10)
         am3chg = (numpy.average(entrydf['amount'].tail(10).tail(3)) - numpy.average(entrydf['amount'].tail(10).head(3)))/numpy.average(entrydf['amount'].tail(10).head(3))
         am2chg = (numpy.average(entrydf['amount'].tail(4).tail(2)) - numpy.average(entrydf['amount'].tail(4).head(2)))/numpy.average(entrydf['amount'].tail(4).head(2))
-        am1chg = (entrydf['amount'].tail(1).get_values()[0] - numpy.average(entrydf['amount'].tail(5).head(4)))/numpy.average(entrydf['amount'].tail(5).head(4))
+        am1chg = (entrydf['amount'].tail(1).to_numpy()[0] - numpy.average(entrydf['amount'].tail(5).head(4)))/numpy.average(entrydf['amount'].tail(5).head(4))
         cquery='trade_date==@curdt'
         pquery='trade_date==@prvdt'
         '''
@@ -795,27 +795,27 @@ class storeoperator:
         extort = numpy.average(entrydf["turnover_rate_f"]) + numpy.std(entrydf["turnover_rate_f"])
         avgmount = numpy.average(entrydf["amount"])
         stdmount = numpy.std(entrydf["amount"])
-        clow = entrydf.query(cquery).get("low").get_values()[0]  
-        phigh = entrydf.query(pquery).get("high").get_values()[0]
-        chigh = entrydf.query(cquery).get("high").get_values()[0]
-        copen = entrydf.query(cquery).get("open").get_values()[0]
-        popen = entrydf.query(pquery).get("open").get_values()[0]
-        cclose = entrydf.query(cquery).get("close").get_values()[0]  
-        pclose = entrydf.query(pquery).get("close").get_values()[0]
-        cchg1 = entrydf.query(cquery).get("pct_chg").get_values()[0]  
-        pchg1 = entrydf.query(pquery).get("pct_chg").get_values()[0]  
-        amount1 = entrydf.query(cquery).get("amount").get_values()[0]
-        amount2 = entrydf.query(pquery).get("amount").get_values()[0]
-        vol1 = entrydf.query(cquery).get("vol").get_values()[0]
+        clow = entrydf.query(cquery).get("low").to_numpy()[0]  
+        phigh = entrydf.query(pquery).get("high").to_numpy()[0]
+        chigh = entrydf.query(cquery).get("high").to_numpy()[0]
+        copen = entrydf.query(cquery).get("open").to_numpy()[0]
+        popen = entrydf.query(pquery).get("open").to_numpy()[0]
+        cclose = entrydf.query(cquery).get("close").to_numpy()[0]  
+        pclose = entrydf.query(pquery).get("close").to_numpy()[0]
+        cchg1 = entrydf.query(cquery).get("pct_chg").to_numpy()[0]  
+        pchg1 = entrydf.query(pquery).get("pct_chg").to_numpy()[0]  
+        amount1 = entrydf.query(cquery).get("amount").to_numpy()[0]
+        amount2 = entrydf.query(pquery).get("amount").to_numpy()[0]
+        vol1 = entrydf.query(cquery).get("vol").to_numpy()[0]
         '''
-        cblgpct = fmfentry.query(cquery).get("blgpct").get_values()[0]  
-        pblgpct = fmfentry.query(pquery).get("blgpct").get_values()[0]         
-        cslgpct = fmfentry.query(cquery).get("slgpct").get_values()[0]
-        pslgpct = fmfentry.query(pquery).get("slgpct").get_values()[0] 
-        cnetflow = fmfentry.query(cquery).get("net_mf_amount").get_values()[0]
-        cnetvol = fmfentry.query(cquery).get("net_mf_vol").get_values()[0]
+        cblgpct = fmfentry.query(cquery).get("blgpct").to_numpy()[0]  
+        pblgpct = fmfentry.query(pquery).get("blgpct").to_numpy()[0]         
+        cslgpct = fmfentry.query(cquery).get("slgpct").to_numpy()[0]
+        pslgpct = fmfentry.query(pquery).get("slgpct").to_numpy()[0] 
+        cnetflow = fmfentry.query(cquery).get("net_mf_amount").to_numpy()[0]
+        cnetvol = fmfentry.query(cquery).get("net_mf_vol").to_numpy()[0]
         '''
-        ctf = entrydf.query(cquery).get("turnover_rate_f").get_values()[0]
+        ctf = entrydf.query(cquery).get("turnover_rate_f").to_numpy()[0]
         camchg = amount1/amount2
         if am1chg > 1.5 and camchg > 2 and (amount1 + amount2) > 160000 and cchg1 > 0 and cclose>6.4:
             if (cchg1 + pchg1) <= 3 and pchg1 > 0:
@@ -835,12 +835,12 @@ class storeoperator:
         mfentry = self.mfstore.loadEntry(code,date)
         if entrydf.empty:
             return False
-        dtlist = entrydf['trade_date'].get_values()
+        dtlist = entrydf['trade_date'].to_numpy()
         size = len(dtlist)
         if size < 10:
             return False
-        curdt = entrydf['trade_date'].tail(1).get_values()[0]
-        prvdt = entrydf['trade_date'].tail(2).get_values()[0]
+        curdt = entrydf['trade_date'].tail(1).to_numpy()[0]
+        prvdt = entrydf['trade_date'].tail(2).to_numpy()[0]
         #print('curdt:' + curdt +' prvdt:' + prvdt)
 
         if curdt <'20190601':
@@ -859,16 +859,16 @@ class storeoperator:
         cquery='trade_date==@curdt'
         pquery='trade_date==@prvdt'
         #fmfentry = mfentry.assign(blgpct=(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol'])/(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol']+mfentry['buy_md_vol']+mfentry['buy_sm_vol']),slgpct=(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol'])/(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol']+mfentry['sell_md_vol']+mfentry['sell_sm_vol'])) 
-        cchg1 = entrydf.query(cquery).get("pct_chg").get_values()[0]  
-        pchg1 = entrydf.query(pquery).get("pct_chg").get_values()[0]  
-        amount1 = entrydf.query(cquery).get("amount").get_values()[0]
-        amount2 = entrydf.query(pquery).get("amount").get_values()[0]
-        curclose = entrydf.query(cquery).get("close").get_values()[0]
-        #cblgpct = fmfentry.query(cquery).get("blgpct").get_values()[0]  
-        #pblgpct = fmfentry.query(pquery).get("blgpct").get_values()[0]         
-        #cslgpct = fmfentry.query(cquery).get("slgpct").get_values()[0]
-        #pslgpct = fmfentry.query(pquery).get("slgpct").get_values()[0] 
-        #cnetflow = mfentry.query(cquery).get("net_mf_amount").get_values()[0]
+        cchg1 = entrydf.query(cquery).get("pct_chg").to_numpy()[0]  
+        pchg1 = entrydf.query(pquery).get("pct_chg").to_numpy()[0]  
+        amount1 = entrydf.query(cquery).get("amount").to_numpy()[0]
+        amount2 = entrydf.query(pquery).get("amount").to_numpy()[0]
+        curclose = entrydf.query(cquery).get("close").to_numpy()[0]
+        #cblgpct = fmfentry.query(cquery).get("blgpct").to_numpy()[0]  
+        #pblgpct = fmfentry.query(pquery).get("blgpct").to_numpy()[0]         
+        #cslgpct = fmfentry.query(cquery).get("slgpct").to_numpy()[0]
+        #pslgpct = fmfentry.query(pquery).get("slgpct").to_numpy()[0] 
+        #cnetflow = mfentry.query(cquery).get("net_mf_amount").to_numpy()[0]
         #ccmavar = (curclose - curma10)/curma10
         if amchg < 2.5:
             if amchg < 1:
@@ -879,7 +879,7 @@ class storeoperator:
             if cchg1 < -5  and (pchg1+cchg1)>-2  and (amount1 + amount2) > 120000:
                 print('strategy 3- [' + code + ']')
             return True
-        camchg = (entrydf['amount'].tail(1).get_values()[0] - numpy.average(entrydf['amount'].tail(4).head(3)))/numpy.average(entrydf['amount'].tail(4).head(3))
+        camchg = (entrydf['amount'].tail(1).to_numpy()[0] - numpy.average(entrydf['amount'].tail(4).head(3)))/numpy.average(entrydf['amount'].tail(4).head(3))
 
         if  camchg>5:
             print('strategy 4 - [' + code + ']')
@@ -900,7 +900,7 @@ class storeoperator:
         bchg = dyentry.query('pct_chg>=8')
         if bchg.empty:
             return bchg
-        dt = bchg['trade_date'].get_values()[0]
+        dt = bchg['trade_date'].to_numpy()[0]
         ent = self.dystore.loadEntry(code, date=dt, line = 5)
         mfent = self.mfstore.loadEntry(code, date=dt, line = 5)
         mfent = mfent.assign(blgpct=(mfent['buy_elg_vol'] + mfent['buy_lg_vol'])/(mfent['buy_elg_vol'] + mfent['buy_lg_vol']+mfent['buy_md_vol']+mfent['buy_sm_vol']),\
@@ -909,7 +909,7 @@ class storeoperator:
         newpd = pd.merge(ent.filter(items=['ts_code', 'trade_date','open','close','high','low', 'pct_chg','amount','vol']),\
             mfent.filter(items=['ts_code', 'trade_date', 'blgpct','slgpct','net_mf_vol']), \
                 on=['ts_code','trade_date'])
-        ffdt = newpd['trade_date'].get_values()
+        ffdt = newpd['trade_date'].to_numpy()
         madf = None
         for fdt in ffdt:
             ma5 = self.dystore.getMa(code, fdt)
@@ -995,7 +995,7 @@ class storeoperator:
         dyentry = self.dystore.getrecInfo(code, date, dyoffset)
         if dyentry.empty:
             return dyentry
-        dt = dyentry['trade_date'].get_values()[0]
+        dt = dyentry['trade_date'].to_numpy()[0]
         ent = self.dystore.loadEntry(code, date=dt, line = 5)
         mfent = self.mfstore.loadEntry(code, date=dt, line = 5)
         mfent = mfent.assign(blgpct=(mfent['buy_elg_vol'] + mfent['buy_lg_vol'])/(mfent['buy_elg_vol'] + mfent['buy_lg_vol']+mfent['buy_md_vol']+mfent['buy_sm_vol']),\
@@ -1004,7 +1004,7 @@ class storeoperator:
         newpd = pd.merge(ent.filter(items=['ts_code', 'trade_date','open','close','high','low', 'pct_chg','amount','vol']),\
             mfent.filter(items=['ts_code', 'trade_date', 'blgpct','slgpct','net_mf_vol','net_mf_amount']), \
                 on=['ts_code','trade_date'])
-        ffdt = newpd['trade_date'].get_values()
+        ffdt = newpd['trade_date'].to_numpy()
         madf = None
         for fdt in ffdt:
             tment = self.mfstore.loadEntry(code, date=fdt, line = 90)
@@ -1044,7 +1044,7 @@ class storeoperator:
         newpd = pd.merge(ent.filter(items=['ts_code', 'trade_date','open','close','high','pct_chg','amount','vol']),\
             mfent.filter(items=['ts_code', 'trade_date', 'blgpct','slgpct','net_mf_vol', 'net_mf_amount']), \
                 on=['ts_code','trade_date'])
-        ffdt = newpd['trade_date'].get_values()
+        ffdt = newpd['trade_date'].to_numpy()
         madf = None
         for fdt in ffdt:
             ma5 = self.dystore.getMa(code, fdt)
@@ -1067,13 +1067,13 @@ class storeoperator:
         bchg = dyentry.query(query1)  
         if bchg.empty:
             return bchg
-        dtlist = bchg['trade_date'].get_values()
+        dtlist = bchg['trade_date'].to_numpy()
         prvdate = None
         for dt in dtlist:
             prvfound = False
             ent = self.dystore.loadEntry(code, date=dt, line = 5)
             mfent = self.mfstore.loadEntry(code, date=dt, line = 5)
-            dtl = ent['trade_date'].get_values()
+            dtl = ent['trade_date'].to_numpy()
             if not prvdate is None:
                 for idt in dtl:
                     if idt == prvdate:
@@ -1096,7 +1096,7 @@ class storeoperator:
         newpd = pd.merge(resdyEntry.filter(items=['ts_code', 'trade_date','open','close','high','pct_chg','amount','vol']),\
             resmfEntry.filter(items=['ts_code', 'trade_date', 'blgpct','slgpct','net_mf_vol']), \
                 on=['ts_code','trade_date'])
-        ffdt = newpd['trade_date'].get_values()
+        ffdt = newpd['trade_date'].to_numpy()
         madf = None
         for fdt in ffdt:
             ma5 = self.dystore.getMa(code, fdt)
@@ -1168,7 +1168,7 @@ class storeoperator:
             tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
             if tmpdf is None:
                 break
-            tmppost = pollst(code, tmpdf['trade_date'].get_values()[0])
+            tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
             tmppost.buildfromdf(tmpdf)
             curnode.prev = tmppost
             tmppost.next = curnode
@@ -1181,7 +1181,7 @@ class storeoperator:
             tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
             if tmpdf is None:
                 break
-            tmppost = pollst(code, tmpdf['trade_date'].get_values()[0])
+            tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
             tmppost.buildfromdf(tmpdf)
             curnode.next = tmppost
             tmppost.prev = curnode

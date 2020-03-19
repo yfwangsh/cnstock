@@ -89,13 +89,13 @@ def rtmonitorwork(stoper, taskname):
                code = mydict['code']
                price = mydict['Pricetarget']
                rq = storeoperator.getRealQuote(code)
-               realprice = float(rq['price'].get_values()[0])
-               name = rq['name'].get_values()[0]
-               preclose = float(rq['pre_close'].get_values()[0])
-               ptime = rq['time'].get_values()[0]
+               realprice = float(rq['price'].to_numpy()[0])
+               name = rq['name'].to_numpy()[0]
+               preclose = float(rq['pre_close'].to_numpy()[0])
+               ptime = rq['time'].to_numpy()[0]
                issend = False
                if realprice==0:
-                  realprice = float(rq['bid'].get_values()[0])
+                  realprice = float(rq['bid'].to_numpy()[0])
                   pct = pollst.calpct(realprice, preclose)
                   msg =  name+ '(' + code  +  ')[' + str(realprice) +'  <' + str(round(pct,2)) + '%>]'
                   if pct > 5 and \
@@ -215,10 +215,10 @@ def checkwork(stoper, date):
                else:
                   if skipcodecache.__contains__(code):
                      continue
-               realprice = float(storeoperator.getRealQuote(code)['price'].get_values()[0])
-               name = storeoperator.getRealQuote(code)['name'].get_values()[0]
+               realprice = float(storeoperator.getRealQuote(code)['price'].to_numpy()[0])
+               name = storeoperator.getRealQuote(code)['name'].to_numpy()[0]
                if realprice==0:
-                  realprice = float(storeoperator.getRealQuote(code)['bid'].get_values()[0])
+                  realprice = float(storeoperator.getRealQuote(code)['bid'].to_numpy()[0])
                pct = abs(round((price-realprice)/realprice * 100,2 ))
                if pct <= 1.5 :
                   if warningset.__contains__(code):

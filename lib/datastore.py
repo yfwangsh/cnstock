@@ -385,7 +385,7 @@ class dailydataStore(stockInfoStore):
         df = self.mgquery(query, sort)
         if df.empty:
             print("can not caculate ma")
-        mylist = df['close'].head(num).get_values()
+        mylist = df['close'].head(num).to_numpy()
         return round(numpy.average(mylist),2)
     '''
     type: 
@@ -424,9 +424,9 @@ class dailydataStore(stockInfoStore):
             ctflg = 'low' 
         elif type[0] == '4':
             ctflg = 'vol'
-        mylist = df[ctflg].head(num).get_values()
+        mylist = df[ctflg].head(num).to_numpy()
         if not direct == 0:
-            mylist = df[ctflg].tail(num).get_values()
+            mylist = df[ctflg].tail(num).to_numpy()
         if type[1] == '0':
             return numpy.max(mylist)
         return numpy.min(mylist)
@@ -459,7 +459,7 @@ class dailydataStore(stockInfoStore):
         df = self.mgquery(query, sort)
         if df.empty:
             print("can not caculate ma")
-        mylist = df['close'].head(num-1).get_values()
+        mylist = df['close'].head(num-1).to_numpy()
         return numpy.average(numpy.append(mylist, price))
 class dybasicStore(stockInfoStore):
     def __init__(self,  mgclient= MongoClient('mongodb://localhost:27017/')['stock']):
