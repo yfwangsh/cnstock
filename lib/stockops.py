@@ -1168,7 +1168,7 @@ class storeoperator:
         c = node
         basenode = pollst(code, date)
         basenode.buildfromdf(df)
-        if abtest != 1:
+        if abtest == 1:
             curnode = basenode
             while c > 0 and both <=0:
                 newoffset = c - node - 1
