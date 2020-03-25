@@ -312,38 +312,42 @@ class stockInfoStore:
             curend = datetime.datetime.now().strftime('%Y%m%d')
         return self.loadData(code, curst, curend)
     @staticmethod
-    def smgquery(mgclient, collection, query, sort=None):
+    def smgquery(mgclient, collection, query, sort=None, limits=0):
         try:
             rowset = mgclient[collection]
             rds = None
             if sort is None:
                 rds = rowset.find(query)
             else:
-                rds = rowset.find(query).sort(sort)
+                if limits <= 0:
+                    rds = rowset.find(query).sort(sort)
+                else:
+                    rds = rowset.find(query).sort(sort).limit(limits)
             arraydict = []
             for rec in rds:
                 arraydict.append(rec)
             return pd.DataFrame.from_records(arraydict)
         except AssertionError as err:
             print(str(err))  
-    def mgquery(self, query,sort=None):
-        return stockInfoStore.smgquery(self.mongoClient,self.collection, query,sort)
-    def loadEntry(self, code, date='',  line=10, prv=True):
-        ndf = self.LoadDataInfobyStock(code)
-        rtdate = date
-        if ndf.empty:
-            return ndf
-        if date == '':
-            rtdate = datetime.datetime.now().strftime('%Y%m%d')
-        querystring = self.keydictarray[1] + '<=@rtdate'
-        if not prv:
-            querystring = self.keydictarray[1] + '>=@rtdate'
-            vdf = ndf.query(querystring).sort_values(by=[self.keydictarray[1]]).head(line)
-            return vdf
-        #print(querystring)
-        vdf = ndf.query(querystring).sort_values(by=[self.keydictarray[1]]).tail(line)
-        return vdf
+    def mgquery(self, query,sort=None, limits=0):
+        return stockInfoStore.smgquery(self.mongoClient,self.collection, query, sort, limits)
 
+    def loadEntry(self, code, date=None,  line=10, prv=True):
+        '''
+        result order : from low to high  
+        '''
+        rtdate = date
+        if date is None:
+            rtdate = datetime.datetime.now().strftime('%Y%m%d')        
+        sort = [(self.keydictarray[1],1)]
+        query = {self.keydictarray[0]: stockInfoStore.canoncode(code), self.keydictarray[1]: {"$gte":rtdate}  }
+        if prv:
+            query = {self.keydictarray[0]: stockInfoStore.canoncode(code), self.keydictarray[1]: {"$lte":rtdate} }                        
+            sort = [(self.keydictarray[1],-1)]
+        df = self.mgquery(query, sort, line)
+        if df.empty:
+            return None
+        return df.sort_values(by=[self.keydictarray[1]])
 
     def loadData(self, code, stdate,eddate):
         '''
@@ -375,16 +379,15 @@ class dailydataStore(stockInfoStore):
         return self.pro.daily(trade_date=trade_date)
     
     def getMa(self,code, trade_date, num = 5):
-        query = {"ts_code": stockInfoStore.canoncode(code), "trade_date": trade_date  }
-        df = self.mgquery(query)
-        if df.empty:
-            #print("Not a trade date!")
+        df = self.getrecInfo(code, trade_date, 0)
+        if df is None:
             return None
         query = {"ts_code": stockInfoStore.canoncode(code), "trade_date": {"$lte":trade_date}  }
         sort = [("trade_date",-1)]
-        df = self.mgquery(query, sort)
-        if df.empty:
+        df = self.mgquery(query, sort, num)
+        if df.empty or len(df) != num:
             print("can not caculate ma")
+            return None
         mylist = df['close'].head(num).to_numpy()
         return round(numpy.average(mylist),2)
     '''
@@ -449,9 +452,8 @@ class dailydataStore(stockInfoStore):
         if trade_date=='':
             date = datetime.datetime.now().strftime('%Y%m%d')
         else:
-            query = {"ts_code": stockInfoStore.canoncode(code), "trade_date": date  }
-            df = self.mgquery(query)
-            if df.empty:
+            df = self.getrecInfo(code, date, 0)
+            if df is None:
                 #print("Not a trade date!")
                 return None
         query = {"ts_code": stockInfoStore.canoncode(code), "trade_date": {"$lte":date}  }

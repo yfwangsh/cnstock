@@ -23,7 +23,7 @@ from lib.stockops import tradeDate
 from lib.stockops import storeoperator
 from lib.stockops import pollst
 from lib.stockops import DingTalk
-
+from lib.utils import Timer
 running=False
 monflag=False
 def getTaskParamList(trdstore, count):
@@ -39,25 +39,43 @@ def getTaskParamList(trdstore, count):
        trade_date = trdstore.getlasttrade(trade_date)
    return retarray
 
+def findsuitjob(stoper, date):
+   processmsg = 'Storedailyinit start findsuit:' + date
+   with Timer() as t:
+      stoper.findsuit(date)
+   processmsg = 'analyst done for %s in %d secs'%(date, t.secs)
+   return processmsg
+
 def Storedailyinit(stoper, tcount):
    datecount = tcount
-   stoper.dtalk.send_msg('Storedailyinit  job start!')
    processmsg = ''
+   threadcount = tcount
+   executor = ThreadPoolExecutor(threadcount )
+   stoper.dtalk.send_msg('Storedailyinit  job start!')
    try:
       stoper.tradedate.initalldata()
       stoper.filldailydb()
       processmsg = 'Storedailyinit done with filldailydb'
+      stoper.dtalk.send_msg('db fill job done!')
       dtparam = getTaskParamList(stoper.tradedate, datecount)
-      for dt in dtparam:
-         processmsg = 'Storedailyinit start findsuit:' + dt
-         stoper.findsuit(dt)
-         processmsg = 'Storedailyinit done with findsuit:' + dt
+      all_task=[]
+      for para in dtparam:
+         future = executor.submit(findsuitjob, stoper, para)
+         all_task.append(future)
+      for fu in as_completed(all_task):
+         data = fu.result()
+         processmsg = f"main: {data}"
+         print(processmsg)
       processmsg = 'Storedailyinit done with findsuit'
       stoper.updateMonitorSet()
       processmsg = 'Storedailyinit done with update MonitorSet'
    except Exception as identifier:
       stoper.dtalk.send_msg('Storedailyinit job run with exception[' + str(identifier) + '] at (' + processmsg + ')')
-   stoper.dtalk.send_msg('Storedailyinit job end!')
+      traceback.print_exc() 
+   finally:
+      executor.shutdown()
+      stoper.dtalk.send_msg('Storedailyinit job end!')
+
 def timeforterm():
    nowtime = datetime.datetime.now()
    amtmstart =datetime.datetime(nowtime.year, nowtime.month, nowtime.day, 9,0,0,0)

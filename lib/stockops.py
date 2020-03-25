@@ -12,6 +12,7 @@ import hashlib
 import time
 import base64
 import urllib
+from .utils import func_line_time
 class pollst:
     def __init__(self, code, trade_date):
         self.upline = 0
@@ -644,8 +645,9 @@ class storeoperator:
         entrydic['code'] = code
         entrydic['trade_date'] = trade_date
         entrydic['match_rule'] = matchRule
-        entrydic['result']  = predresult
         entrydic['Pricetarget'] = price
+        if predresult is not None:
+            entrydic['result']  = predresult
         if monflag is not None:
             monitor = 0
             if monflag:
@@ -757,8 +759,8 @@ class storeoperator:
             return retval 
 
     def calrate(self, code, date=''):
-        prvmavar = None
-        curmavar = None
+        if date == '':
+            date = datetime.datetime.now().strftime('%Y%m%d')
         df = self.dystore.getrecInfo(code, date, offset=0)
         if df is None:
             return False
@@ -767,46 +769,53 @@ class storeoperator:
         #mfentry = self.mfstore.loadEntry(code, date, 15)
         if entrydf.empty:
             return False
+        entrydf = pd.merge(entrydf, dybdf, on=['ts_code','trade_date'])
+        entrydf = entrydf.sort_values(by='trade_date', ascending = False)
         dtlist = entrydf['trade_date'].to_numpy()
         size = len(dtlist)
-        if size < 10:
+        '''
+        新股不考虑
+        '''
+        if size < 15:
             return False
-        entrydf = pd.merge(entrydf, dybdf, on=['ts_code','trade_date'])
-
-        curdt = entrydf['trade_date'].tail(1).to_numpy()[0]
-        prvdt = entrydf['trade_date'].tail(2).to_numpy()[0]
-        if date == '':
-            date = datetime.datetime.now().strftime('%Y%m%d')
+        #dtlist.sort()
+        #dtlist = dtlist[::-1]
+        curdt = dtlist[0]
+        #prvdt = dtlist[1]
         if (datetime.datetime.strptime(date,'%Y%m%d') - datetime.datetime.strptime(curdt,'%Y%m%d')) > 10*datetime.timedelta(days=1):
             return False
-        pmavar = (self.dystore.getMa(code, prvdt) - self.dystore.getMa(code,prvdt,10))/self.dystore.getMa(code,prvdt,10)
-        cmavar = (self.dystore.getMa(code, curdt) - self.dystore.getMa(code,curdt,10))/self.dystore.getMa(code,curdt,10)
-        am3chg = (numpy.average(entrydf['amount'].tail(10).tail(3)) - numpy.average(entrydf['amount'].tail(10).head(3)))/numpy.average(entrydf['amount'].tail(10).head(3))
-        am2chg = (numpy.average(entrydf['amount'].tail(4).tail(2)) - numpy.average(entrydf['amount'].tail(4).head(2)))/numpy.average(entrydf['amount'].tail(4).head(2))
-        am1chg = (entrydf['amount'].tail(1).to_numpy()[0] - numpy.average(entrydf['amount'].tail(5).head(4)))/numpy.average(entrydf['amount'].tail(5).head(4))
+        #pmavar = (self.dystore.getMa(code, prvdt) - self.dystore.getMa(code,prvdt,10))/self.dystore.getMa(code,prvdt,10)
+        #cmavar = (self.dystore.getMa(code, curdt) - self.dystore.getMa(code,curdt,10))/self.dystore.getMa(code,curdt,10)
+        #am3chg = (numpy.average(entrydf['amount'].tail(10).tail(3)) - numpy.average(entrydf['amount'].tail(10).head(3)))/numpy.average(entrydf['amount'].tail(10).head(3))
+        #am2chg = (numpy.average(entrydf['amount'].tail(4).tail(2)) - numpy.average(entrydf['amount'].tail(4).head(2)))/numpy.average(entrydf['amount'].tail(4).head(2))
+
+        '''
         cquery='trade_date==@curdt'
         pquery='trade_date==@prvdt'
-        '''
         fmfentry = mfentry.assign(blgpct=(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol'])/(mfentry['buy_elg_vol'] + mfentry['buy_lg_vol']+mfentry['buy_md_vol']+mfentry['buy_sm_vol']),slgpct=(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol'])/(mfentry['sell_elg_vol'] + mfentry['sell_lg_vol']+mfentry['sell_md_vol']+mfentry['sell_sm_vol'])) 
         avgblgrt = numpy.average(fmfentry["blgpct"]) 
         stdblgrt = numpy.std(fmfentry["blgpct"])
         exslgrt = numpy.average(fmfentry["slgpct"]) + numpy.std(fmfentry["slgpct"])
         '''
+        '''
         extort = numpy.average(entrydf["turnover_rate_f"]) + numpy.std(entrydf["turnover_rate_f"])
         avgmount = numpy.average(entrydf["amount"])
         stdmount = numpy.std(entrydf["amount"])
-        clow = entrydf.query(cquery).get("low").to_numpy()[0]  
-        phigh = entrydf.query(pquery).get("high").to_numpy()[0]
-        chigh = entrydf.query(cquery).get("high").to_numpy()[0]
-        copen = entrydf.query(cquery).get("open").to_numpy()[0]
-        popen = entrydf.query(pquery).get("open").to_numpy()[0]
-        cclose = entrydf.query(cquery).get("close").to_numpy()[0]  
-        pclose = entrydf.query(pquery).get("close").to_numpy()[0]
-        cchg1 = entrydf.query(cquery).get("pct_chg").to_numpy()[0]  
-        pchg1 = entrydf.query(pquery).get("pct_chg").to_numpy()[0]  
-        amount1 = entrydf.query(cquery).get("amount").to_numpy()[0]
-        amount2 = entrydf.query(pquery).get("amount").to_numpy()[0]
-        vol1 = entrydf.query(cquery).get("vol").to_numpy()[0]
+        clow = entrydf["low"].to_numpy()[0]  
+        phigh = entrydf["high"].to_numpy()[1]
+        chigh = entrydf["high"].to_numpy()[0]
+        copen = entrydf["open"].to_numpy()[0]
+        popen = entrydf["open"].to_numpy()[1]
+        pclose = entrydf["close"].to_numpy()[1]
+        vol1 = entrydf["vol"].to_numpy()[0]
+        '''
+        amountlist = entrydf['amount'].to_numpy()
+        am1chg = (amountlist[0] - numpy.average(amountlist[1:5]))/numpy.average(amountlist[1:5])
+        cclose = entrydf["close"].to_numpy()[0]  
+        cchg1 = entrydf["pct_chg"].to_numpy()[0]  
+        pchg1 = entrydf["pct_chg"].to_numpy()[1]  
+        amount1 = amountlist[0]
+        amount2 = amountlist[1]
         '''
         cblgpct = fmfentry.query(cquery).get("blgpct").to_numpy()[0]  
         pblgpct = fmfentry.query(pquery).get("blgpct").to_numpy()[0]         
@@ -815,17 +824,14 @@ class storeoperator:
         cnetflow = fmfentry.query(cquery).get("net_mf_amount").to_numpy()[0]
         cnetvol = fmfentry.query(cquery).get("net_mf_vol").to_numpy()[0]
         '''
-        ctf = entrydf.query(cquery).get("turnover_rate_f").to_numpy()[0]
         camchg = amount1/amount2
+
         if am1chg > 1.5 and camchg > 2 and (amount1 + amount2) > 160000 and cchg1 > 0 and cclose>6.4:
             if (cchg1 + pchg1) <= 3 and pchg1 > 0:
                 return False
-            results = self.checkpredict(code, curdt,5)
-            if self.debug:
-                print('strategy 1 - [' + code + '] and result: ' +str(results) + ',pay attendtion to amount change:' + str(camchg))
-            self.saveanadb(code, curdt, 'strategy1', str(results))
-            if not self.debug and (cchg1 + pchg1) <= 2:
-                print('strategy 1X - [' + code + '] and result: ' +str(results) + ',pay attendtion to amount change:' + str(camchg))
+            #results = self.checkpredict(code, curdt,5)
+            print('strategy 1 - @%s : [%s] pay attendtion to amount change: %s'%(curdt, code, str(camchg)))
+            self.saveanadb(code, curdt, 'strategy1', None)
             return True
         return False
     def calHigh(self, code, date=''):
@@ -1155,39 +1161,79 @@ class storeoperator:
     def loaddystorebyQuery(self, query):
         return self.dystore.mgquery(query)
 
-    def buildposts(self, code, date, node = 5, both = 0):
+    def buildposts(self, code, date, node = 5, both = 0, abtest=1):
         df = self.dystore.getrecInfo(code, date, offset=0)
         if df is None:
             return None
         c = node
         basenode = pollst(code, date)
         basenode.buildfromdf(df)
-        curnode = basenode
-        while c > 0 and both <=0:
-            newoffset = c - node - 1
-            tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
-            if tmpdf is None:
-                break
-            tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
-            tmppost.buildfromdf(tmpdf)
-            curnode.prev = tmppost
-            tmppost.next = curnode
-            curnode = tmppost
-            c = c - 1
-        c = node
-        curnode = basenode
-        while c > 0 and both >=0:
-            newoffset = node - c + 1
-            tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
-            if tmpdf is None:
-                break
-            tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
-            tmppost.buildfromdf(tmpdf)
-            curnode.next = tmppost
-            tmppost.prev = curnode
-            curnode = tmppost
-            c = c - 1
+        if abtest != 1:
+            curnode = basenode
+            while c > 0 and both <=0:
+                newoffset = c - node - 1
+                tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
+                if tmpdf is None:
+                    break
+                tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
+                tmppost.buildfromdf(tmpdf)
+                curnode.prev = tmppost
+                tmppost.next = curnode
+                curnode = tmppost
+                c = c - 1
+            c = node
+            curnode = basenode
+            while c > 0 and both >=0:
+                newoffset = node - c + 1
+                tmpdf = self.dystore.getrecInfo(code, date, offset=newoffset)
+                if tmpdf is None:
+                    break
+                tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
+                tmppost.buildfromdf(tmpdf)
+                curnode.next = tmppost
+                tmppost.prev = curnode
+                curnode = tmppost
+                c = c - 1
+            return basenode
+        if both <= 0:
+            curnode = None
+            backdf = self.dystore.loadEntry(code, date, node + 1)
+            frame=pd.DataFrame()
+            for i in range(0, len(backdf)):
+                tmpdf = frame.append(backdf.iloc[i])
+                
+                if tmpdf['trade_date'].to_numpy()[0] == date:
+                    if curnode is not None:
+                        basenode.prev=curnode
+                        curnode.next = basenode
+                    break
+                tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
+                tmppost.buildfromdf(tmpdf)
+                if curnode is None:
+                    curnode = tmppost
+                else:
+                    curnode.next = tmppost
+                    tmppost.prev = curnode
+                    curnode = tmppost
+        if both >= 0:
+            curnode = None
+            fwddf = self.dystore.loadEntry(code, date, node + 1, prv=False)
+            frame=pd.DataFrame()
+            for i in range(0, len(fwddf)):
+                tmpdf = frame.append(fwddf.iloc[i])
+                
+                if tmpdf['trade_date'].to_numpy()[0] == date:
+                    assert(curnode is None)
+                    curnode = basenode
+                    continue
+                tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
+                tmppost.buildfromdf(tmpdf)
+                curnode.next = tmppost
+                tmppost.prev = curnode
+                curnode = tmppost
         return basenode
+            
+
 
     '''
              or \
