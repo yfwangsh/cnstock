@@ -48,6 +48,16 @@ class pollst:
         self.neg = (openp - closep) > 0
         self.jump = pct_chg > 0 and (lowp - closep/(1+pct_chg/100))>0 
 
+    def buildfromsi(self, si):
+        openp = si['open']
+        closep = si['close']
+        highp = si['high']
+        lowp = si['low']
+        pct_chg = si['pct_chg']
+        vol = si['vol']
+        amount = si['amount']
+        self.buildpost(openp, closep, highp, lowp, pct_chg, vol, amount)
+    
     def buildfromdf(self, df):
         openp = df['open'].to_numpy()[0]
         closep = df['close'].to_numpy()[0]
@@ -757,7 +767,7 @@ class storeoperator:
             else:
                 retval = round(df['close'].to_numpy()[0]* (100 - (cchg+pchg)/2)/100, 2)
             return retval 
-
+    @func_line_time
     def calrate(self, code, date=''):
         if date == '':
             date = datetime.datetime.now().strftime('%Y%m%d')
@@ -949,7 +959,7 @@ class storeoperator:
     def getCMonitorbyCode(self, code):
         df = self.analyst.fetchDataEntryByCode(code, rule='strategy3')
         return df 
-
+    #@func_line_time
     def calup(self, code, date):
         cpo = self.buildposts(code, date, node = 7)
         if cpo is None or cpo.closep<=7 or cpo.pct_chg > 5:
@@ -1160,7 +1170,7 @@ class storeoperator:
             #self.calHigh(code, rdate)    
     def loaddystorebyQuery(self, query):
         return self.dystore.mgquery(query)
-
+    #@func_line_time
     def buildposts(self, code, date, node = 5, both = 0, abtest=1):
         df = self.dystore.getrecInfo(code, date, offset=0)
         if df is None:
@@ -1168,7 +1178,7 @@ class storeoperator:
         c = node
         basenode = pollst(code, date)
         basenode.buildfromdf(df)
-        if abtest == 1:
+        if abtest != 1:
             curnode = basenode
             while c > 0 and both <=0:
                 newoffset = c - node - 1
@@ -1198,17 +1208,16 @@ class storeoperator:
         if both <= 0:
             curnode = None
             backdf = self.dystore.loadEntry(code, date, node + 1)
-            frame=pd.DataFrame()
             for i in range(0, len(backdf)):
-                tmpdf = frame.append(backdf.iloc[i])
+                tmpsi = backdf.iloc[i]
                 
-                if tmpdf['trade_date'].to_numpy()[0] == date:
+                if tmpsi['trade_date'] == date:
                     if curnode is not None:
                         basenode.prev=curnode
                         curnode.next = basenode
                     break
-                tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
-                tmppost.buildfromdf(tmpdf)
+                tmppost = pollst(code, tmpsi['trade_date'])
+                tmppost.buildfromsi(tmpsi)
                 if curnode is None:
                     curnode = tmppost
                 else:
@@ -1218,16 +1227,15 @@ class storeoperator:
         if both >= 0:
             curnode = None
             fwddf = self.dystore.loadEntry(code, date, node + 1, prv=False)
-            frame=pd.DataFrame()
             for i in range(0, len(fwddf)):
-                tmpdf = frame.append(fwddf.iloc[i])
+                tmpsi = fwddf.iloc[i]
                 
-                if tmpdf['trade_date'].to_numpy()[0] == date:
+                if tmpsi['trade_date'] == date:
                     assert(curnode is None)
                     curnode = basenode
                     continue
-                tmppost = pollst(code, tmpdf['trade_date'].to_numpy()[0])
-                tmppost.buildfromdf(tmpdf)
+                tmppost = pollst(code, tmpsi['trade_date'])
+                tmppost.buildfromsi(tmpsi)
                 curnode.next = tmppost
                 tmppost.prev = curnode
                 curnode = tmppost

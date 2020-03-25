@@ -12,8 +12,7 @@ class Timer(object):
         self.end = clock()
         self.secs = self.end - self.start
         self.msecs = self.secs * 1000  # millisecs
-        if self.verbose:
-            print('elapsed time: %f ms' %(self.msecs))
+
 try:
     from line_profiler import LineProfiler
     #from functools import wraps
@@ -33,7 +32,8 @@ except:
         def decorator(*args, **kwargs):
             with Timer() as t:
                 func_return = f(*args, **kwargs)
-            print('function %s running for %d'%(f.__name__, t.msecs))
+            if t.verbose:
+                print('function %s running for %d'%(f.__name__, t.msecs))
             return func_return 
         return decorator 
 
