@@ -1,5 +1,10 @@
 from time import clock
- 
+from configparser import ConfigParser
+from configparser import RawConfigParser
+
+from configparser import NoOptionError
+from configparser import NoSectionError
+
 class Timer(object):
     def __init__(self, verbose=False):
         self.verbose = verbose
@@ -36,6 +41,29 @@ except:
                 print('function %s running for %d'%(f.__name__, t.msecs))
             return func_return 
         return decorator 
+
+class MyConf:
+    def getConf(self, section, key, default=None):
+        value = default
+        try:
+            value = self.config.get(section, key)
+        except NoSectionError:
+            pass 
+        except NoOptionError:
+            pass        
+        return value
+    @staticmethod
+    def initConf(file, type=None):
+        cp = None
+        if type == 'raw':
+            cp = RawConfigParser()
+        else:
+            cp = ConfigParser()
+        cp.read(file)
+        return cp
+    def __init__(self, filename, type=None): 
+        self.config = MyConf.initConf(filename, type)
+
 
 @func_line_time
 def testrun(abc):
