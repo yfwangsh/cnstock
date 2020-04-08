@@ -192,13 +192,16 @@ class goldwatcher:
                         if gapsec == 0 and cdict['price'] == basedic['price'] and count > 5:
                             self._STOP = True
                             msg = '%s@%s收盘,当前收盘价%s, 开盘价%s'%(cdict['name'], cdict['date'] + ' ' + cdict['time'], cdict['price'], cdict['open'])
-                            self.dtalk.send_msg(msg)                        
-                        if gapsec > 60 and (prg > 1 or prg < -1) :
+                            self.dtalk.send_msg(msg)  
+                            continue                      
+                        if prg > 1 or prg < -1:
                             basedic = cdict
                             tm = basedic['date'] + ' ' + basedic['time']
                             pct = (float(basedic['price']) - float(basedic['open']))*100/ float(basedic['open'])
                             msg ='%s@%s,在%d秒时间内，变化幅度%f,当前价%s, 开盘价%s, 涨幅:%f'%(basedic['name'], tm, gapsec, prg, basedic['price'], basedic['open'], pct) 
                             self.dtalk.send_msg(msg)                    
+                        elif prg < 0:
+                            basedic = cdict
             except KeyboardInterrupt:
                 return               
             except Exception as ex:
