@@ -176,6 +176,8 @@ class goldwatcher:
                 result =  self.doquery(sess,ts)
                 if result is not None:
                     cdict = self.parsetodb(result)
+                    if count % 100 == 0:
+                        print(cdict)
                     if basedic is None:
                         basedic = cdict
                         warsig = (float(cdict['open']) - float(cdict['prev']))*100/ float(cdict['prev'])
@@ -189,7 +191,8 @@ class goldwatcher:
                         prg = (float(cdict['price']) - float(basedic['price']))*100/ float(basedic['price'])
                         if gapsec == 0 and cdict['price'] == basedic['price']:
                             self._STOP = True
-                            print('%s@%s收盘,当前收盘价%s, 开盘价%s'%(cdict['name'], cdict['date'] + ' ' + cdict['time'], cdict['price'], cdict['open']))
+                            msg = '%s@%s收盘,当前收盘价%s, 开盘价%s'%(cdict['name'], cdict['date'] + ' ' + cdict['time'], cdict['price'], cdict['open'])
+                            self.dtalk.send_msg(msg)                        
                         if gapsec > 60 and (prg > 1 or prg < -1) :
                             basedic = cdict
                             tm = basedic['date'] + ' ' + basedic['time']
@@ -206,7 +209,6 @@ class goldwatcher:
         retdic = {}
         match = re.match(self.matchpattern, intext)
         if match:
-            print(match.groups())
             for item in match.groups():
                 arry = item.split(',')
                 retdic['price'] = arry[0]
