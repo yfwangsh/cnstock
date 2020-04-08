@@ -189,7 +189,7 @@ class goldwatcher:
                         ctime = time.strptime(cdict['date'] + ' ' + cdict['time'], '%Y-%m-%d %H:%M:%S')
                         gapsec = time.mktime(ctime) - time.mktime(lastm)
                         prg = (float(cdict['price']) - float(basedic['price']))*100/ float(basedic['price'])
-                        if gapsec == 0 and cdict['price'] == basedic['price']:
+                        if gapsec == 0 and cdict['price'] == basedic['price'] and count > 5:
                             self._STOP = True
                             msg = '%s@%s收盘,当前收盘价%s, 开盘价%s'%(cdict['name'], cdict['date'] + ' ' + cdict['time'], cdict['price'], cdict['open'])
                             self.dtalk.send_msg(msg)                        
