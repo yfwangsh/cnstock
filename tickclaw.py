@@ -152,6 +152,7 @@ class goldwatcher:
         self._STOP = False
         threading.Thread(target=self._threadstop).start()
     def initRun(self):
+        self.debug = os.path.exists('/tmp/gwdbg')
         if os.path.exists('locktk'):
             os.remove('locktk')
 
@@ -165,6 +166,7 @@ class goldwatcher:
             if os.path.exists('locktk'):
                 self._STOP = True
             time.sleep(10)
+            self.debug = os.path.exists('/tmp/gwdbg')
     def _threadrun(self):
         sess = requests.Session()
         count = 0
@@ -176,7 +178,7 @@ class goldwatcher:
                 result =  self.doquery(sess,ts)
                 if result is not None:
                     cdict = self.parsetodb(result)
-                    if count % 100 == 0:
+                    if self.debug:
                         print(cdict)
                     if basedic is None:
                         basedic = cdict
@@ -189,7 +191,7 @@ class goldwatcher:
                         ctime = time.strptime(cdict['date'] + ' ' + cdict['time'], '%Y-%m-%d %H:%M:%S')
                         gapsec = time.mktime(ctime) - time.mktime(lastm)
                         prg = (float(cdict['price']) - float(basedic['price']))*100/ float(basedic['price'])
-                        if gapsec == 0 and cdict['price'] == basedic['price'] and count > 5:
+                        if gapsec == 0.00 and cdict['price'] == basedic['price'] and count > 5:
                             self._STOP = True
                             msg = '%s@%s收盘,当前收盘价%s, 开盘价%s'%(cdict['name'], cdict['date'] + ' ' + cdict['time'], cdict['price'], cdict['open'])
                             self.dtalk.send_msg(msg)  
