@@ -3,6 +3,8 @@
 
 
 import sys
+import getopt
+
 import http.client
 from urllib.parse import urlparse
 import threading
@@ -17,6 +19,7 @@ import traceback
 import threading
 import os
 import re
+import json
 from requests.exceptions import ProxyError
 from requests.exceptions import ConnectTimeout
 from requests.exceptions import ReadTimeout
@@ -129,6 +132,93 @@ class TickerScanner():
         fndf = pd.concat(fdn_list)
         fndf.reset_index(drop=True, inplace=True)
         return fndf
+class infowatcher:
+    def __init__(self):
+        self.conf = MyConf('conf/mystock.conf')
+        self.watchurl = 'http://zhibo.sina.com.cn/api/zhibo/feed?callback=runq&page=1&page_size=20&zhibo_id=152&tag_id=0&dire=f&dpc=1&pagesize=20&'
+        self.headers = {'Accept':  '*/*',
+               'Accept-Encoding':'gzip, deflate',
+               'Accept-Language':'zh-CN, zh; q=0.9',
+               'Pragma':'no-cache',
+               'Cache-Control':'no-cache',
+               'Connection':'keep-alive',
+               'Upgrade-Insecure-Requests': '1',
+               'Referer':'http://finance.sina.com.cn/7x24/',
+               'User-Agent':'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Safari/537.36 Edge/15.15063'}
+        self.matchpattern = re.compile(r'try\{runq\((.*)\);\}catch\(e\)\{\};')
+        self.dtalk = DingTalk()
+        self.dtalk.setURL('https://oapi.dingtalk.com/robot/send?access_token=' + self.conf.getConf('dtalk', 'alg_access_token'))
+        self.initRun()
+        self._STOP = False
+        self.lastid = None
+        threading.Thread(target=self._threadstop).start()
+    def initRun(self):
+        self.debug = os.path.exists('/tmp/gwdbg')
+        if os.path.exists('infolock'):
+            os.remove('infolock')
+
+    def run(self):
+        try:
+            threading.Thread(target=self._threadrun).start()
+        except KeyboardInterrupt:
+            sys.exit(0)
+    def _threadstop(self):
+        while not self._STOP:
+            if os.path.exists('infolock'):
+                self._STOP = True
+            time.sleep(10)
+            self.debug = os.path.exists('/tmp/gwdbg')
+    def _threadrun(self):
+        sess = requests.Session()
+        count = 0
+        while not self._STOP:
+            count+=1
+            try:
+                ts = '%d'%(int(round(time.time() * 1000)))
+                result =  self.doquery(sess,ts)
+                if result is not None:
+                    retarray = self.parsetodb(result) 
+                    for i in range(0, retarray.__len__())[::-1]:
+                        sid = retarray[i].get('id')
+                        if self.lastid is None or (self.lastid is not None and sid > self.lastid):
+                            self.lastid = sid
+                            msg ='[财经新闻] %s: %s'%(retarray[i].get('update_time'), retarray[i].get('rich_text'))
+                            print(msg)
+                            self.dtalk.send_msg(msg) 
+            except KeyboardInterrupt:
+                return               
+            except Exception as ex:
+                traceback.print_exc()
+                print(type(ex))
+            time.sleep(55)
+    def parsetodb(self, intext):
+        retarry = []
+        match = re.match(self.matchpattern, intext)
+        if match:
+            for item in match.groups():
+                jsonobj = json.loads(item)
+                if jsonobj.get('result') is not None and \
+                    jsonobj.get('result').get('data') is not None and \
+                    jsonobj.get('result').get('data').get('top') is not None and \
+                    jsonobj.get('result').get('data').get('top').get('list') is not None:
+                    retarry = jsonobj.get('result').get('data').get('feed').get('list')
+        else:
+            print('not match')
+        return retarry
+    def doquery(self, sess,  ts):
+        try:
+            url = 'http://zhibo.sina.com.cn/api/zhibo/feed?callback=runq&page=1&page_size=5&zhibo_id=152&tag_id=0&dire=f&dpc=1&pagesize=5&type=0&_=' + ts
+            if self.lastid is not None:
+                url = self.watchurl + 'id=%s&type=0&_=%s'%(self.lastid, ts) 
+            r = sess.get(url, headers=self.headers)
+            if r.status_code == 200:
+                return r.text
+            return None
+            #timeout=(8, 13)
+        except Exception as ex:
+            traceback.print_exc()
+            print(type(ex))
+    
 class goldwatcher:
     def __init__(self):
         self.conf = MyConf('conf/mystock.conf')
@@ -244,20 +334,33 @@ class goldwatcher:
         except Exception as ex:
             traceback.print_exc()
             print(type(ex))
-        
-if __name__ == '__main__':
-    #print(get_random_proxy())
-    #tks = TickerScanner()
-    '''
-    sess = requests.Session()
-    r = sess.get('http://market.finance.sina.com.cn/transHis.php?symbol=sz000001&date=2018-04-27&page=300', headers = my_headers, timeout=(8, 13))  
-    r.encoding = 'gb2312'
-    soup = BeautifulSoup(r.text, 'lxml') 
-    lk = soup.select_one('val')
-    print(lk)
-    tables = soup.select('table')
-    print(tables)
-    '''
-    #df = tks.crawticks('600824', '2020-03-20')  
+def runinfowatch():
+    iwf = infowatcher()
+    iwf.run()
+def rungoldwatch():
     gd = goldwatcher()
     gd.run()
+def main(argv):
+    mode = None
+    try:
+        opts, args = getopt.getopt(argv,"hm:",['mode='])
+    except getopt.GetoptError:
+        print('tickclaw.py -m <mode>')
+        sys.exit(2)
+    for opt, arg in opts:
+        if opt == '-h':
+            print('tickclaw.py -m <mode>')
+            sys.exit(0)
+        elif opt in ("-m", "--mode"):
+            mode = arg
+    if mode is None:
+        print('mode is required, usage: tickclaw.py -m <mode>')
+        sys.exit(-1)
+    if mode == 'gd':
+        rungoldwatch()
+    elif mode == 'info':
+        runinfowatch()
+        
+if __name__ == '__main__':
+    main(sys.argv[1:])
+    
