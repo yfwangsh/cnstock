@@ -4,7 +4,8 @@
 
 import sys
 import getopt
-
+from pymongo import MongoClient
+import copy
 import http.client
 from urllib.parse import urlparse
 import threading
@@ -28,6 +29,7 @@ from requests.exceptions import ConnectionError
 sys.path.append(os.getcwd() + '/lib')
 sys.path.append(os.getcwd())
 from lib.stockops import DingTalk
+from lib.datastore import dbbase
 from lib.datastore import stockInfoStore
 from utils import MyConf
 proxypool_url = 'http://114.67.90.19:8055/random'
@@ -46,6 +48,20 @@ def get_random_proxy():
     :return: proxy
     """
     return requests.get(proxypool_url, proxies=localproxies).text.strip()
+class crawdb(dbbase):
+    def __init__(self, mgclient=MongoClient('mongodb://localhost:27017/')['infofina']):
+        super(crawdb, self).__init__(mgclient)
+        self.collection='news'
+        self.keydictarray=['sid']
+
+    def addinfo(self, msgdic):
+        msgset = self.mongoClient[self.collection]
+        keydic={}
+        cpdict = copy.deepcopy(msgdic)
+        for dickey in self.keydictarray:
+            keydic[dickey] = msgdic[dickey]
+            del cpdict[dickey]
+        msgset.update_one(keydic,{'$setOnInsert': {'upflag':1}, '$set':cpdict}, upsert=True)
 
 class TickerScanner():
     def __init__(self):
@@ -151,6 +167,8 @@ class infowatcher:
         self.initRun()
         self._STOP = False
         self.lastid = None
+        self.crawdb = crawdb()
+
         threading.Thread(target=self._threadstop).start()
     def initRun(self):
         self.debug = os.path.exists('/tmp/gwdbg')
@@ -182,9 +200,14 @@ class infowatcher:
                         sid = retarray[i].get('id')
                         if self.lastid is None or (self.lastid is not None and sid > self.lastid):
                             self.lastid = sid
+                            msgdic = {}                            
                             msg ='[财经新闻] %s: %s'%(retarray[i].get('update_time'), retarray[i].get('rich_text'))
                             print(msg)
-                            self.dtalk.send_msg(msg) 
+                            msgdic['sid'] = sid
+                            msgdic['update_time'] = retarray[i].get('update_time')
+                            msgdic['rich_text'] = retarray[i].get('rich_text')
+                            self.crawdb.addinfo(msgdic)
+                            #self.dtalk.send_msg(msg) 
             except KeyboardInterrupt:
                 return               
             except Exception as ex:
@@ -363,4 +386,3 @@ def main(argv):
         
 if __name__ == '__main__':
     main(sys.argv[1:])
-    
